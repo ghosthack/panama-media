@@ -1,0 +1,9 @@
+# Keep source and metadata byte-stable across Windows and Unix checkouts.
+* text=auto eol=lf
+
+*.java       text eol=lf
+*.xml        text eol=lf
+*.md         text eol=lf
+*.sh         text eol=lf
+*.yml        text eol=lf
+*.properties text eol=lf

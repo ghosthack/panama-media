@@ -1,0 +1,28 @@
+# Maven
+**/target/
+
+# IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+.vscode/
+nbproject/
+nbactions.xml
+
+# OS and editor files
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+*~
+*.swp
+
+# Logs and local environment
+*.log
+.env
+.env.*
