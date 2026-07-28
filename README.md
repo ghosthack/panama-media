@@ -71,6 +71,13 @@ Media Foundation is analogous:
 </dependency>
 ```
 
+`MediaFoundation.extractFrame(...)` is the normalized poster-frame API: it
+returns tightly packed BGRA pixels at the visible display dimensions, hiding
+decoder surface alignment and padding. Callers that demux compressed video
+themselves can use `MfVideoDecoder` for the lower-level path; its `Frame`
+retains the native NV12/P010 row stride and UV-plane offset while reporting
+the visible dimensions.
+
 FFM native access must be enabled for the binding modules used by the
 application. Enabling the complete public family is:
 
