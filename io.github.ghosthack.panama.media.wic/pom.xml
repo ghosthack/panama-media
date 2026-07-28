@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.github.ghosthack</groupId>
         <artifactId>panama-media-parent</artifactId>
-        <version>0.1.0</version>
+        <version>0.1.1</version>
     </parent>
     <artifactId>panama-media-wic</artifactId>
     <packaging>jar</packaging>
