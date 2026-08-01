@@ -8,12 +8,12 @@
         <artifactId>panama-media-parent</artifactId>
         <version>0.1.1</version>
     </parent>
-    <artifactId>panama-media-mediafoundation</artifactId>
+    <artifactId>panama-media-d3d11video</artifactId>
     <packaging>jar</packaging>
-    <name>panama-media-mediafoundation</name>
-    <description>Panama FFM bindings to Windows Media Foundation (mfplat, mfreadwrite) and D3D11 for video decoding.</description>
+    <name>panama-media-d3d11video</name>
+    <description>Panama FFM bindings to D3D11 video decode (DXVA): ID3D11VideoDevice/VideoContext/VideoDecoder and the H.264 DXVA structs, for hardware decode without libavcodec's d3d11va hwaccel.</description>
     <properties>
-        <module.name>io.github.ghosthack.panama.media.mediafoundation</module.name>
+        <module.name>io.github.ghosthack.panama.media.d3d11video</module.name>
         <test.native.access.modules.extra>,io.github.ghosthack.panama.media.comruntime</test.native.access.modules.extra>
     </properties>
     <dependencies>
@@ -25,11 +25,6 @@
         <dependency>
             <groupId>io.github.ghosthack</groupId>
             <artifactId>panama-media-comruntime</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.github.ghosthack</groupId>
-            <artifactId>panama-media-d3d11video</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
