@@ -46,6 +46,7 @@
         <module>io.github.ghosthack.panama.media.core</module>
         <module>io.github.ghosthack.panama.media.comruntime</module>
         <module>io.github.ghosthack.panama.media.wic</module>
+        <module>io.github.ghosthack.panama.media.d3d11video</module>
         <module>io.github.ghosthack.panama.media.mediafoundation</module>
     </modules>
 

@@ -12,6 +12,7 @@ The current public snapshot contains the Windows family:
 | `panama-media-core` | `io.github.ghosthack.panama.media.core` | Shared native loading, pixel formats, decoded-image records, and memory helpers |
 | `panama-media-comruntime` | `io.github.ghosthack.panama.media.comruntime` | COM lifecycle, `IUnknown`, GUID/HRESULT, and vtable dispatch |
 | `panama-media-wic` | `io.github.ghosthack.panama.media.wic` | WIC still-image dimensions, decode, thumbnails, metadata, and animated GIF |
+| `panama-media-d3d11video` | `io.github.ghosthack.panama.media.d3d11video` | D3D11 video devices, decoder surfaces, DXVA profiles, and hardware decode structures |
 | `panama-media-mediafoundation` | `io.github.ghosthack.panama.media.mediafoundation` | Media probing, frame extraction/streaming, and raw H.264/HEVC/AV1 MFT decode |
 
 The bindings are designed for 64-bit Windows and are CI-tested on Windows
@@ -29,7 +30,7 @@ mvn install
 
 `verify` compiles and packages the complete public reactor. The project test
 suite is deliberately not included in this source snapshot. `install` makes
-the four `0.1.0` artifacts available to another local Maven project.
+the five `0.1.1` artifacts available to another local Maven project.
 
 ## Use
 
@@ -40,7 +41,7 @@ For WIC, declare the top-level artifact; Maven brings in `core` and
 <dependency>
   <groupId>io.github.ghosthack</groupId>
   <artifactId>panama-media-wic</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </dependency>
 ```
 
@@ -67,7 +68,7 @@ Media Foundation is analogous:
 <dependency>
   <groupId>io.github.ghosthack</groupId>
   <artifactId>panama-media-mediafoundation</artifactId>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
 </dependency>
 ```
 
@@ -82,7 +83,7 @@ FFM native access must be enabled for the binding modules used by the
 application. Enabling the complete public family is:
 
 ```text
---enable-native-access=io.github.ghosthack.panama.media.core,io.github.ghosthack.panama.media.comruntime,io.github.ghosthack.panama.media.wic,io.github.ghosthack.panama.media.mediafoundation
+--enable-native-access=io.github.ghosthack.panama.media.core,io.github.ghosthack.panama.media.comruntime,io.github.ghosthack.panama.media.wic,io.github.ghosthack.panama.media.d3d11video,io.github.ghosthack.panama.media.mediafoundation
 ```
 
 The caller owns every `Arena` passed to a decode method and therefore controls

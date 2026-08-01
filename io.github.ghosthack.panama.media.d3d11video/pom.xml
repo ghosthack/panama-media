@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>io.github.ghosthack</groupId>
+        <artifactId>panama-media-parent</artifactId>
+        <version>0.1.1</version>
+    </parent>
+    <artifactId>panama-media-d3d11video</artifactId>
+    <packaging>jar</packaging>
+    <name>panama-media-d3d11video</name>
+    <description>Panama FFM bindings to D3D11 video decode (DXVA): ID3D11VideoDevice/VideoContext/VideoDecoder and the H.264 DXVA structs, for hardware decode without libavcodec's d3d11va hwaccel.</description>
+    <properties>
+        <module.name>io.github.ghosthack.panama.media.d3d11video</module.name>
+        <test.native.access.modules.extra>,io.github.ghosthack.panama.media.comruntime</test.native.access.modules.extra>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>io.github.ghosthack</groupId>
+            <artifactId>panama-media-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ghosthack</groupId>
+            <artifactId>panama-media-comruntime</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId></plugin>
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId></plugin>
+            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId></plugin>
+        </plugins>
+    </build>
+</project>

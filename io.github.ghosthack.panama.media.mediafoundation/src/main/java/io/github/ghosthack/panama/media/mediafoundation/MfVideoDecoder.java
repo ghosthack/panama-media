@@ -5,7 +5,13 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 
 import io.github.ghosthack.panama.media.core.DecodeException;
+import io.github.ghosthack.panama.media.core.HardwareAdapterInfo;
+import io.github.ghosthack.panama.media.core.HardwareAdapterSelector;
+import io.github.ghosthack.panama.media.core.NativeVideoSurface;
 import io.github.ghosthack.panama.media.comruntime.Ole32;
+import io.github.ghosthack.panama.media.d3d11video.D3D11Video;
+import io.github.ghosthack.panama.media.d3d11video.jextract.D3D11_TEXTURE2D_DESC;
+import io.github.ghosthack.panama.media.d3d11video.jextract.DXGI_SAMPLE_DESC;
 
 /**
  * A single open Media Foundation video decoder MFT driven over the <b>raw
@@ -55,10 +61,42 @@ public final class MfVideoDecoder implements AutoCloseable {
     public record Frame(MemorySegment data, long uvOffset, int width, int height,
                         int stride, boolean tenBit, long id) {}
 
+    /** One caller-owned D3D11 output texture plus its source-sample id. */
+    public record SurfaceFrame(NativeVideoSurface surface, long id) {}
+
+    /** Legacy compressed-video subtypes covered by the provider survey. */
+    public enum ProbeCodec {
+        MPEG4_PART2_MP4V,
+        MPEG4_PART2_M4S2,
+        MJPEG,
+        H263,
+        VC1_WMV3,
+        VC1_WVC1
+    }
+
+    /**
+     * Media Foundation capability result for one compressed subtype.
+     *
+     * @param advertised          a decoder MFT was registered for the subtype
+     * @param sessionOpened       input/output types were negotiated successfully
+     * @param d3dManagerAttached  the selected D3D11 manager was accepted;
+     *                            this does not prove hardware-engine use
+     * @param adapterInfo         attached adapter, or CPU/software
+     * @param detail              empty on success; otherwise the open failure
+     */
+    public record ProbeResult(
+            ProbeCodec codec,
+            boolean advertised,
+            boolean sessionOpened,
+            boolean d3dManagerAttached,
+            HardwareAdapterInfo adapterInfo,
+            String detail) {}
+
     /** MFT_OUTPUT_DATA_BUFFER: {DWORD dwStreamID; IMFSample*; DWORD dwStatus; IMFMediaEvent*}. */
     private static final long ODB_SAMPLE_OFFSET = 8;
     private static final long ODB_STATUS_OFFSET = 16;
     private static final long ODB_EVENTS_OFFSET = 24;
+    private static final int D3D11_BIND_SHADER_RESOURCE = 0x8;
 
     // ── process-wide platform startup (never torn down — see MediaFoundation) ──
 
@@ -100,7 +138,9 @@ public final class MfVideoDecoder implements AutoCloseable {
     private MemorySegment dxgiManager = MemorySegment.NULL;
 
     private final boolean tenBit;
+    private final HardwareAdapterSelector adapterSelector;
     private boolean hardwareAccelerated;
+    private HardwareAdapterInfo adapterInfo = HardwareAdapterInfo.software("mediafoundation");
 
     /** Surface (aligned) dimensions from MF_MT_FRAME_SIZE — the buffer geometry. */
     private int width;
@@ -127,6 +167,81 @@ public final class MfVideoDecoder implements AutoCloseable {
     }
 
     /**
+     * Probes decoder registration and raw-sample session negotiation for a
+     * legacy compressed subtype. No compressed fixture is submitted: callers
+     * must keep this result distinct from fixture-backed frame production.
+     */
+    public static ProbeResult probe(
+            ProbeCodec codec,
+            int width,
+            int height,
+            HardwareAdapterSelector adapterSelector) {
+        HardwareAdapterSelector selector = adapterSelector == null
+                ? HardwareAdapterSelector.defaultAdapter()
+                : adapterSelector;
+        if (!isAvailable()) {
+            return new ProbeResult(codec, false, false, false,
+                    HardwareAdapterInfo.software("mediafoundation"),
+                    "Media Foundation is unavailable");
+        }
+        MemorySegment subtype = probeSubtype(codec);
+        boolean advertised;
+        try {
+            advertised = decoderRegistered(subtype);
+        } catch (RuntimeException e) {
+            return new ProbeResult(codec, false, false, false,
+                    HardwareAdapterInfo.software("mediafoundation"),
+                    conciseMessage(e));
+        }
+        if (!advertised) {
+            return new ProbeResult(codec, false, false, false,
+                    HardwareAdapterInfo.software("mediafoundation"),
+                    "no decoder MFT registered");
+        }
+        try (MfVideoDecoder decoder =
+                     new MfVideoDecoder(subtype, width, height, false, selector)) {
+            return new ProbeResult(codec, true, true,
+                    decoder.isHardwareAccelerated(), decoder.adapterInfo(), "");
+        } catch (RuntimeException e) {
+            return new ProbeResult(codec, true, false, false,
+                    HardwareAdapterInfo.software("mediafoundation"),
+                    conciseMessage(e));
+        }
+    }
+
+    private static boolean decoderRegistered(MemorySegment subtype) {
+        try (Arena temp = Arena.ofConfined()) {
+            ensurePlatform();
+            MediaFoundation.registerStoreCodecs();
+            MemorySegment decoder =
+                    MediaFoundation.activateDecoderForSubtype(temp, subtype);
+            boolean found = !MemorySegment.NULL.equals(decoder);
+            Ole32.release(decoder);
+            return found;
+        } catch (Throwable t) {
+            throw new DecodeException("Media Foundation decoder enumeration failed", t);
+        }
+    }
+
+    private static MemorySegment probeSubtype(ProbeCodec codec) {
+        return switch (codec) {
+            case MPEG4_PART2_MP4V -> MediaFoundation.MFVideoFormat_MP4V;
+            case MPEG4_PART2_M4S2 -> MediaFoundation.MFVideoFormat_M4S2;
+            case MJPEG -> MediaFoundation.MFVideoFormat_MJPG;
+            case H263 -> MediaFoundation.MFVideoFormat_H263;
+            case VC1_WMV3 -> MediaFoundation.MFVideoFormat_WMV3;
+            case VC1_WVC1 -> MediaFoundation.MFVideoFormat_WVC1;
+        };
+    }
+
+    private static String conciseMessage(Throwable error) {
+        String message = error.getMessage();
+        return message == null || message.isBlank()
+                ? error.getClass().getSimpleName()
+                : message.replace('\n', ' ').replace('\r', ' ');
+    }
+
+    /**
      * Opens an AV1 decoder MFT for raw OBU temporal-unit samples.
      *
      * @param width   coded frame width (from the sequence header)
@@ -136,10 +251,141 @@ public final class MfVideoDecoder implements AutoCloseable {
      *                               is unavailable
      */
     public static MfVideoDecoder openAv1(int width, int height, boolean tenBit) {
+        return openAv1(width, height, tenBit, HardwareAdapterSelector.defaultAdapter());
+    }
+
+    /** Opens AV1 with an explicit D3D11 adapter selector. */
+    public static MfVideoDecoder openAv1(
+            int width,
+            int height,
+            boolean tenBit,
+            HardwareAdapterSelector adapterSelector) {
         if (!isAvailable()) {
             throw new IllegalStateException("Media Foundation is unavailable");
         }
-        return new MfVideoDecoder(MediaFoundation.MFVideoFormat_AV01, width, height, tenBit);
+        return new MfVideoDecoder(
+                MediaFoundation.MFVideoFormat_AV01, width, height, tenBit, adapterSelector);
+    }
+
+    /** Opens a registered VP8 decoder MFT for raw VP8 frames. */
+    public static MfVideoDecoder openVp8(int width, int height) {
+        return openVp8(width, height, HardwareAdapterSelector.defaultAdapter());
+    }
+
+    /** Opens VP8 with an explicit D3D11 adapter selector. */
+    public static MfVideoDecoder openVp8(
+            int width,
+            int height,
+            HardwareAdapterSelector adapterSelector) {
+        if (!isAvailable()) {
+            throw new IllegalStateException("Media Foundation is unavailable");
+        }
+        return new MfVideoDecoder(
+                MediaFoundation.MFVideoFormat_VP80,
+                width, height, false, adapterSelector);
+    }
+
+    /** Opens the Store-distributed VP9 decoder MFT for raw VP9 frames. */
+    public static MfVideoDecoder openVp9(int width, int height, boolean tenBit) {
+        return openVp9(width, height, tenBit, HardwareAdapterSelector.defaultAdapter());
+    }
+
+    /** Opens VP9 with an explicit D3D11 adapter selector. */
+    public static MfVideoDecoder openVp9(
+            int width,
+            int height,
+            boolean tenBit,
+            HardwareAdapterSelector adapterSelector) {
+        if (!isAvailable()) {
+            throw new IllegalStateException("Media Foundation is unavailable");
+        }
+        return new MfVideoDecoder(
+                MediaFoundation.MFVideoFormat_VP90, width, height, tenBit, adapterSelector);
+    }
+
+    /** Opens the OS MPEG-2 Video decoder MFT for elementary-stream pictures. */
+    public static MfVideoDecoder openMpeg2(int width, int height) {
+        return openMpeg2(width, height, HardwareAdapterSelector.defaultAdapter());
+    }
+
+    /** Opens MPEG-2 Video with an explicit D3D11 adapter selector. */
+    public static MfVideoDecoder openMpeg2(
+            int width,
+            int height,
+            HardwareAdapterSelector adapterSelector) {
+        if (!isAvailable()) {
+            throw new IllegalStateException("Media Foundation is unavailable");
+        }
+        return new MfVideoDecoder(
+                MediaFoundation.MFVideoFormat_MPEG2,
+                width, height, false, adapterSelector);
+    }
+
+    /** Opens the registered MPEG-4 Part 2 Visual decoder MFT for raw VOP samples. */
+    public static MfVideoDecoder openMpeg4Part2(int width, int height) {
+        return openMpeg4Part2(
+                width, height, HardwareAdapterSelector.defaultAdapter());
+    }
+
+    /** Opens MPEG-4 Part 2 Visual on an explicit D3D11 adapter. */
+    public static MfVideoDecoder openMpeg4Part2(
+            int width,
+            int height,
+            HardwareAdapterSelector adapterSelector) {
+        if (!isAvailable()) {
+            throw new IllegalStateException("Media Foundation is unavailable");
+        }
+        return new MfVideoDecoder(
+                MediaFoundation.MFVideoFormat_MP4V,
+                width, height, false, adapterSelector);
+    }
+
+    /** Opens the registered Motion-JPEG decoder MFT for complete JPEG samples. */
+    public static MfVideoDecoder openMjpeg(int width, int height) {
+        return openMjpeg(width, height, HardwareAdapterSelector.defaultAdapter());
+    }
+
+    /** Opens Motion-JPEG with an explicit D3D11 adapter selector. */
+    public static MfVideoDecoder openMjpeg(
+            int width,
+            int height,
+            HardwareAdapterSelector adapterSelector) {
+        if (!isAvailable()) {
+            throw new IllegalStateException("Media Foundation is unavailable");
+        }
+        return new MfVideoDecoder(
+                MediaFoundation.MFVideoFormat_MJPG,
+                width, height, false, adapterSelector);
+    }
+
+    /** Opens a WMV3 / VC-1 Simple or Main Profile decoder. */
+    public static MfVideoDecoder openWmv3(
+            int width,
+            int height,
+            byte[] sequenceHeader,
+            HardwareAdapterSelector adapterSelector) {
+        if (!isAvailable()) {
+            throw new IllegalStateException("Media Foundation is unavailable");
+        }
+        return new MfVideoDecoder(
+                MediaFoundation.MFVideoFormat_WMV3,
+                width, height, false, adapterSelector,
+                MediaFoundation.MF_MT_USER_DATA, sequenceHeader);
+    }
+
+    /** Opens a WVC1 / VC-1 Advanced Profile decoder. */
+    public static MfVideoDecoder openWvc1(
+            int width,
+            int height,
+            byte[] sequenceHeader,
+            HardwareAdapterSelector adapterSelector) {
+        if (!isAvailable()) {
+            throw new IllegalStateException("Media Foundation is unavailable");
+        }
+        return new MfVideoDecoder(
+                MediaFoundation.MFVideoFormat_WVC1,
+                width, height, false, adapterSelector,
+                MediaFoundation.MF_MT_MPEG_SEQUENCE_HEADER, sequenceHeader);
     }
 
     /**
@@ -154,10 +400,19 @@ public final class MfVideoDecoder implements AutoCloseable {
      *                               MFT is unavailable
      */
     public static MfVideoDecoder openH264(int width, int height) {
+        return openH264(width, height, HardwareAdapterSelector.defaultAdapter());
+    }
+
+    /** Opens H.264 with an explicit D3D11 adapter selector. */
+    public static MfVideoDecoder openH264(
+            int width,
+            int height,
+            HardwareAdapterSelector adapterSelector) {
         if (!isAvailable()) {
             throw new IllegalStateException("Media Foundation is unavailable");
         }
-        return new MfVideoDecoder(MediaFoundation.MFVideoFormat_H264, width, height, false);
+        return new MfVideoDecoder(
+                MediaFoundation.MFVideoFormat_H264, width, height, false, adapterSelector);
     }
 
     /**
@@ -172,14 +427,44 @@ public final class MfVideoDecoder implements AutoCloseable {
      *                               is unavailable
      */
     public static MfVideoDecoder openHevc(int width, int height, boolean tenBit) {
+        return openHevc(width, height, tenBit, HardwareAdapterSelector.defaultAdapter());
+    }
+
+    /** Opens HEVC with an explicit D3D11 adapter selector. */
+    public static MfVideoDecoder openHevc(
+            int width,
+            int height,
+            boolean tenBit,
+            HardwareAdapterSelector adapterSelector) {
         if (!isAvailable()) {
             throw new IllegalStateException("Media Foundation is unavailable");
         }
-        return new MfVideoDecoder(MediaFoundation.MFVideoFormat_HEVC, width, height, tenBit);
+        return new MfVideoDecoder(
+                MediaFoundation.MFVideoFormat_HEVC, width, height, tenBit, adapterSelector);
     }
 
-    private MfVideoDecoder(MemorySegment subtype, int width, int height, boolean tenBit) {
+    private MfVideoDecoder(
+            MemorySegment subtype,
+            int width,
+            int height,
+            boolean tenBit,
+            HardwareAdapterSelector adapterSelector) {
+        this(subtype, width, height, tenBit, adapterSelector,
+                MemorySegment.NULL, null);
+    }
+
+    private MfVideoDecoder(
+            MemorySegment subtype,
+            int width,
+            int height,
+            boolean tenBit,
+            HardwareAdapterSelector adapterSelector,
+            MemorySegment sequenceHeaderAttribute,
+            byte[] sequenceHeader) {
         this.tenBit = tenBit;
+        this.adapterSelector = adapterSelector == null
+                ? HardwareAdapterSelector.defaultAdapter()
+                : adapterSelector;
         this.requestedWidth = width;
         this.requestedHeight = height;
         boolean ok = false;
@@ -194,7 +479,8 @@ public final class MfVideoDecoder implements AutoCloseable {
             }
 
             attachD3dManager(temp);
-            setInputType(temp, subtype, width, height);
+            setInputType(temp, subtype, width, height,
+                    sequenceHeaderAttribute, sequenceHeader);
             negotiateOutputTypeAtOpen(temp);
             readStreamInfo();
 
@@ -221,6 +507,11 @@ public final class MfVideoDecoder implements AutoCloseable {
         return hardwareAccelerated;
     }
 
+    /** Adapter actually attached to the MFT, or CPU/software when none was accepted. */
+    public HardwareAdapterInfo adapterInfo() {
+        return adapterInfo;
+    }
+
     /** Display width of the negotiated output type (updated on stream change). */
     public int width() {
         return width;
@@ -235,19 +526,20 @@ public final class MfVideoDecoder implements AutoCloseable {
 
     /** Best-effort D3D11 device + DXGI manager, mirroring the Source Reader path. */
     private void attachD3dManager(Arena temp) throws Throwable {
-        MemorySegment ppDevice = temp.allocate(ValueLayout.ADDRESS);
-        MemorySegment ppContext = temp.allocate(ValueLayout.ADDRESS);
-        int hr = (int) MediaFoundation.H_D3D11_CREATE_DEVICE.invokeExact(
-                MemorySegment.NULL, 1 /* HARDWARE */, MemorySegment.NULL, 0x820,
-                MemorySegment.NULL, 0, 7, ppDevice, MemorySegment.NULL, ppContext);
-        if (Ole32.failed(hr)) {
-            return; // software decode without a D3D manager
+        D3D11Video.Device selectedDevice;
+        try {
+            selectedDevice = D3D11Video.createDevice(temp, adapterSelector);
+        } catch (RuntimeException e) {
+            if (adapterSelector.isExplicit()) {
+                throw e;
+            }
+            return;
         }
-        d3dDevice = ppDevice.get(ValueLayout.ADDRESS, 0);
-        d3dContext = ppContext.get(ValueLayout.ADDRESS, 0);
+        d3dDevice = selectedDevice.device();
+        d3dContext = selectedDevice.context();
 
         MemorySegment ppMt = temp.allocate(ValueLayout.ADDRESS);
-        hr = (int) MediaFoundation.IUnknown_QueryInterface.invokeExact(
+        int hr = (int) MediaFoundation.IUnknown_QueryInterface.invokeExact(
                 Ole32.vtable(d3dDevice, 0), d3dDevice,
                 MediaFoundation.IID_ID3D10Multithread, ppMt);
         if (!Ole32.failed(hr)) {
@@ -262,6 +554,7 @@ public final class MfVideoDecoder implements AutoCloseable {
         hr = (int) MediaFoundation.H_MF_CREATE_DXGI_DEVICE_MANAGER.invokeExact(
                 pResetToken, ppManager);
         if (Ole32.failed(hr)) {
+            requireSelectedAdapter("MFCreateDXGIDeviceManager", hr);
             return;
         }
         dxgiManager = ppManager.get(ValueLayout.ADDRESS, 0);
@@ -271,12 +564,25 @@ public final class MfVideoDecoder implements AutoCloseable {
         if (Ole32.failed(hr)) {
             Ole32.release(dxgiManager);
             dxgiManager = MemorySegment.NULL;
+            requireSelectedAdapter("IMFDXGIDeviceManager::ResetDevice", hr);
             return;
         }
         hr = (int) MediaFoundation.IMFTransform_ProcessMessage.invokeExact(
                 Ole32.vtable(decoder, 23), decoder,
                 MediaFoundation.MFT_MESSAGE_SET_D3D_MANAGER, dxgiManager.address());
         hardwareAccelerated = !Ole32.failed(hr);
+        if (hardwareAccelerated) {
+            adapterInfo = selectedDevice.adapterInfo();
+        } else {
+            requireSelectedAdapter("MFT_MESSAGE_SET_D3D_MANAGER", hr);
+        }
+    }
+
+    private void requireSelectedAdapter(String operation, int hr) {
+        if (adapterSelector.isExplicit()) {
+            throw new DecodeException(operation + " rejected requested adapter "
+                    + adapterSelector + " (HRESULT 0x" + Integer.toHexString(hr) + ")");
+        }
     }
 
     /**
@@ -286,7 +592,13 @@ public final class MfVideoDecoder implements AutoCloseable {
      * decoder insists on), stamp the frame size on it, and set it. Falls back
      * to a hand-built type when the transform advertises none.
      */
-    private void setInputType(Arena temp, MemorySegment subtype, int w, int h) throws Throwable {
+    private void setInputType(
+            Arena temp,
+            MemorySegment subtype,
+            int w,
+            int h,
+            MemorySegment sequenceHeaderAttribute,
+            byte[] sequenceHeader) throws Throwable {
         MemorySegment ppType = temp.allocate(ValueLayout.ADDRESS);
         MemorySegment guidBuf = temp.allocate(16);
         for (int i = 0; ; i++) {
@@ -306,6 +618,8 @@ public final class MfVideoDecoder implements AutoCloseable {
                             MediaFoundation.MF_MT_FRAME_SIZE,
                             ((long) w << 32) | (h & 0xFFFFFFFFL));
                     Ole32.check(hr, "SetUINT64(MF_MT_FRAME_SIZE)");
+                    setSequenceHeader(temp, type,
+                            sequenceHeaderAttribute, sequenceHeader);
                     hr = (int) MediaFoundation.IMFTransform_SetInputType.invokeExact(
                             Ole32.vtable(decoder, 15), decoder, 0, type, 0);
                     Ole32.check(hr, "Decoder SetInputType (advertised)");
@@ -336,6 +650,8 @@ public final class MfVideoDecoder implements AutoCloseable {
                     Ole32.vtable(type, 22), type,
                     MediaFoundation.MF_MT_FRAME_SIZE, ((long) w << 32) | (h & 0xFFFFFFFFL));
             Ole32.check(hr, "SetUINT64(MF_MT_FRAME_SIZE)");
+            setSequenceHeader(temp, type,
+                    sequenceHeaderAttribute, sequenceHeader);
             // Decoder MFTs read these three during SetInputType and fail with
             // MF_E_ATTRIBUTENOTFOUND when absent (verified against the AV1
             // decoder MFT): progressive, nominal 30fps, square pixels.
@@ -357,6 +673,24 @@ public final class MfVideoDecoder implements AutoCloseable {
         } finally {
             Ole32.release(type);
         }
+    }
+
+    private static void setSequenceHeader(
+            Arena temp,
+            MemorySegment type,
+            MemorySegment attribute,
+            byte[] sequenceHeader) throws Throwable {
+        if (attribute == null || MemorySegment.NULL.equals(attribute)
+                || sequenceHeader == null || sequenceHeader.length == 0) {
+            return;
+        }
+        MemorySegment bytes = temp.allocate(sequenceHeader.length);
+        MemorySegment.copy(sequenceHeader, 0, bytes,
+                ValueLayout.JAVA_BYTE, 0, sequenceHeader.length);
+        int hr = (int) MediaFoundation.IMFAttributes_SetBlob.invokeExact(
+                Ole32.vtable(type, 26), type, attribute,
+                bytes, sequenceHeader.length);
+        Ole32.check(hr, "SetBlob(VC-1 sequence header)");
     }
 
     /**
@@ -603,6 +937,163 @@ public final class MfVideoDecoder implements AutoCloseable {
         } catch (Throwable t) {
             throw new DecodeException("nextFrame failed", t);
         }
+    }
+
+    /**
+     * Returns the next hardware MFT output as a caller-owned one-slice D3D11
+     * texture. The MFT's possibly-array-backed subresource is copied
+     * GPU-to-GPU before the sample is released; no media buffer is locked or
+     * copied through host memory.
+     *
+     * @throws IllegalStateException when the active MFT does not expose an
+     *                               {@code IMFDXGIBuffer} output
+     */
+    public SurfaceFrame nextSurface() {
+        ensureOpen();
+        if (!MemorySegment.NULL.equals(lockedBuffer)) {
+            throw new IllegalStateException("previous heap frame not released");
+        }
+        try (Arena temp = Arena.ofConfined()) {
+            for (int guard = 0; guard < 100_000; guard++) {
+                MemorySegment callerSample = MemorySegment.NULL;
+                outputBuf.set(ValueLayout.JAVA_INT, 0, 0);
+                outputBuf.set(ValueLayout.JAVA_INT, ODB_STATUS_OFFSET, 0);
+                outputBuf.set(ValueLayout.ADDRESS, ODB_EVENTS_OFFSET, MemorySegment.NULL);
+                if (decoderProvidesSamples) {
+                    outputBuf.set(ValueLayout.ADDRESS, ODB_SAMPLE_OFFSET, MemorySegment.NULL);
+                } else {
+                    callerSample = createOutputSample();
+                    outputBuf.set(ValueLayout.ADDRESS, ODB_SAMPLE_OFFSET, callerSample);
+                }
+
+                int hr = (int) MediaFoundation.IMFTransform_ProcessOutput.invokeExact(
+                        Ole32.vtable(decoder, 25), decoder, 0, 1, outputBuf, pdwStatus);
+                if (hr == MediaFoundation.MF_E_TRANSFORM_TYPE_NOT_SET
+                        || hr == MediaFoundation.MF_E_TRANSFORM_STREAM_CHANGE) {
+                    Ole32.release(callerSample);
+                    negotiateOutputType(temp);
+                    readStreamInfo();
+                    continue;
+                }
+                if (hr == MediaFoundation.MF_E_TRANSFORM_NEED_MORE_INPUT) {
+                    Ole32.release(callerSample);
+                    return null;
+                }
+                Ole32.check(hr, "Decoder ProcessOutput (surface)");
+
+                MemorySegment sample =
+                        outputBuf.get(ValueLayout.ADDRESS, ODB_SAMPLE_OFFSET);
+                if (!MemorySegment.NULL.equals(callerSample)
+                        && !callerSample.equals(sample)) {
+                    Ole32.release(callerSample);
+                }
+                if (MemorySegment.NULL.equals(sample)) {
+                    continue;
+                }
+                try {
+                    return copySurface(sample, temp);
+                } finally {
+                    Ole32.release(sample);
+                }
+            }
+            throw new DecodeException("decoder made no surface progress");
+        } catch (IllegalStateException | DecodeException e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new DecodeException("nextSurface failed", t);
+        }
+    }
+
+    private SurfaceFrame copySurface(
+            MemorySegment sample,
+            Arena scratch) throws Throwable {
+        long id = 0;
+        int hr = (int) MediaFoundation.IMFSample_GetSampleTime.invokeExact(
+                Ole32.vtable(sample, 35), sample, pLong);
+        if (!Ole32.failed(hr)) {
+            id = pLong.get(ValueLayout.JAVA_LONG, 0);
+        }
+
+        MemorySegment ppBuffer = scratch.allocate(ValueLayout.ADDRESS);
+        hr = (int) MediaFoundation.IMFSample_GetBufferByIndex.invokeExact(
+                Ole32.vtable(sample, 40), sample, 0, ppBuffer);
+        Ole32.check(hr, "IMFSample::GetBufferByIndex");
+        MemorySegment buffer = ppBuffer.get(ValueLayout.ADDRESS, 0);
+        try {
+            MemorySegment ppDxgi = scratch.allocate(ValueLayout.ADDRESS);
+            hr = (int) MediaFoundation.IUnknown_QueryInterface.invokeExact(
+                    Ole32.vtable(buffer, 0), buffer,
+                    MediaFoundation.IID_IMFDXGIBuffer, ppDxgi);
+            if (Ole32.failed(hr)) {
+                throw new IllegalStateException(
+                        "Media Foundation output is not an IMFDXGIBuffer "
+                                + "(hardware surface output unavailable, HRESULT 0x"
+                                + Integer.toHexString(hr) + ")");
+            }
+            MemorySegment dxgi = ppDxgi.get(ValueLayout.ADDRESS, 0);
+            try {
+                MemorySegment ppTexture = scratch.allocate(ValueLayout.ADDRESS);
+                hr = (int) MediaFoundation.IMFDXGIBuffer_GetResource.invokeExact(
+                        Ole32.vtable(dxgi, 3), dxgi,
+                        MediaFoundation.IID_ID3D11Texture2D, ppTexture);
+                Ole32.check(hr, "IMFDXGIBuffer::GetResource");
+                MemorySegment source = ppTexture.get(ValueLayout.ADDRESS, 0);
+                try {
+                    MemorySegment pSubresource =
+                            scratch.allocate(ValueLayout.JAVA_INT);
+                    hr = (int) MediaFoundation.IMFDXGIBuffer_GetSubresourceIndex
+                            .invokeExact(Ole32.vtable(dxgi, 4), dxgi, pSubresource);
+                    Ole32.check(hr, "IMFDXGIBuffer::GetSubresourceIndex");
+                    int sourceSubresource =
+                            pSubresource.get(ValueLayout.JAVA_INT, 0);
+                    MemorySegment owned = createSurfaceTexture(scratch);
+                    try {
+                        D3D11Video.copySubresourceRegion(
+                                d3dContext, owned, 0, source, sourceSubresource);
+                        return new SurfaceFrame(
+                                new MfD3d11Surface(
+                                        owned,
+                                        displayWidth,
+                                        displayHeight,
+                                        tenBit ? "p010" : "nv12",
+                                        adapterInfo),
+                                id);
+                    } catch (RuntimeException failure) {
+                        Ole32.release(owned);
+                        throw failure;
+                    }
+                } finally {
+                    Ole32.release(source);
+                }
+            } finally {
+                Ole32.release(dxgi);
+            }
+        } finally {
+            Ole32.release(buffer);
+        }
+    }
+
+    private MemorySegment createSurfaceTexture(Arena scratch) {
+        MemorySegment desc = scratch.allocate(D3D11_TEXTURE2D_DESC.layout());
+        D3D11_TEXTURE2D_DESC.Width(desc, width);
+        D3D11_TEXTURE2D_DESC.Height(desc, height);
+        D3D11_TEXTURE2D_DESC.MipLevels(desc, 1);
+        D3D11_TEXTURE2D_DESC.ArraySize(desc, 1);
+        D3D11_TEXTURE2D_DESC.Format(desc,
+                tenBit ? D3D11Video.DXGI_FORMAT_P010 : D3D11Video.DXGI_FORMAT_NV12);
+        MemorySegment sampleDesc = D3D11_TEXTURE2D_DESC.SampleDesc(desc);
+        DXGI_SAMPLE_DESC.Count(sampleDesc, 1);
+        DXGI_SAMPLE_DESC.Quality(sampleDesc, 0);
+        D3D11_TEXTURE2D_DESC.Usage(desc, D3D11Video.D3D11_USAGE_DEFAULT);
+        D3D11_TEXTURE2D_DESC.BindFlags(desc,
+                D3D11_BIND_SHADER_RESOURCE | D3D11Video.D3D11_BIND_DECODER);
+        D3D11_TEXTURE2D_DESC.CPUAccessFlags(desc, 0);
+        D3D11_TEXTURE2D_DESC.MiscFlags(desc, 0);
+
+        MemorySegment ppTexture = scratch.allocate(ValueLayout.ADDRESS);
+        int hr = D3D11Video.createTexture2D(d3dDevice, desc, ppTexture);
+        Ole32.check(hr, "CreateTexture2D (Media Foundation surface)");
+        return ppTexture.get(ValueLayout.ADDRESS, 0);
     }
 
     /** Locks {@code sample}'s contiguous buffer and builds the caller view. */
