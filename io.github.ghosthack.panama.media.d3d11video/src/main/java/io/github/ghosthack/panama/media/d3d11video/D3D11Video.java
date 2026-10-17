@@ -39,7 +39,7 @@ import io.github.ghosthack.panama.media.core.Platform;
  * from documentation — see {@code panama-media/jextract-verify/headers/d3d11video_wrapper.h}.
  * <p>
  * COM vtable dispatch follows this project's existing convention (see
- * {@link Ole32}): {@link Linker#downcallHandle(FunctionDescriptor)} with no
+ * {@link Ole32}): {@link Linker#downcallHandle(FunctionDescriptor, Linker.Option...)} with no
  * fixed address yields a {@link MethodHandle} that takes the function
  * pointer (read from the object's vtable via {@link Ole32#vtable}) as a
  * leading argument.
