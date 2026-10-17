@@ -31,7 +31,7 @@ mvn install
 
 `verify` compiles and packages the complete public reactor. The project test
 suite is deliberately not included in this source snapshot. `install` makes
-the six `0.1.1` artifacts available to another local Maven project.
+the six `0.1.2` artifacts available to another local Maven project.
 
 ## Use
 
@@ -42,7 +42,7 @@ For WIC, declare the top-level artifact; Maven brings in `core` and
 <dependency>
   <groupId>io.github.ghosthack</groupId>
   <artifactId>panama-media-wic</artifactId>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
 </dependency>
 ```
 
@@ -69,7 +69,7 @@ Media Foundation is analogous:
 <dependency>
   <groupId>io.github.ghosthack</groupId>
   <artifactId>panama-media-mediafoundation</artifactId>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
 </dependency>
 ```
 
