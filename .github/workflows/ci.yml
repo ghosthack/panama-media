@@ -33,4 +33,5 @@ jobs:
           java-version: 26
           cache: maven
       - name: Verify
-        run: mvn -B -ntp verify
+        shell: bash
+        run: ./mvnw -B -ntp verify
