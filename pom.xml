@@ -6,7 +6,7 @@
 
     <groupId>io.github.ghosthack</groupId>
     <artifactId>panama-media-parent</artifactId>
-    <version>0.1.3</version>
+    <version>0.1.4</version>
     <packaging>pom</packaging>
 
     <name>panama-media</name>
@@ -51,6 +51,9 @@
         <module>io.github.ghosthack.panama.media.mediafoundation</module>
         <module>io.github.ghosthack.panama.media.accelerate</module>
         <module>io.github.ghosthack.panama.media.opengl</module>
+        <module>io.github.ghosthack.panama.media.corefoundation</module>
+        <module>io.github.ghosthack.panama.media.cgimage</module>
+        <module>io.github.ghosthack.panama.media.avfoundation</module>
     </modules>
 
     <properties>

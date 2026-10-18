@@ -4,8 +4,8 @@ Source-only Java 26 bindings to operating-system media and graphics APIs using
 the Foreign Function and Memory (FFM) API. There is no JNI shim and no bundled
 native code: the bindings call libraries supplied by the operating system —
 the COM runtime, Windows Imaging Component, Media Foundation and D3D11 on
-Windows, Accelerate (vImage) on macOS, and the system OpenGL on all three
-platforms.
+Windows, CoreFoundation, ImageIO, AVFoundation and Accelerate (vImage) on
+macOS, and the system OpenGL on all three platforms.
 
 The current public snapshot contains:
 
@@ -18,13 +18,17 @@ The current public snapshot contains:
 | `panama-media-d3d11video` | `io.github.ghosthack.panama.media.d3d11video` | D3D11 video devices, decoder surfaces, DXVA profiles, and hardware decode structures |
 | `panama-media-mediafoundation` | `io.github.ghosthack.panama.media.mediafoundation` | Media probing, frame extraction/streaming, and raw H.264/HEVC/AV1 MFT decode |
 | `panama-media-accelerate` | `io.github.ghosthack.panama.media.accelerate` | macOS vImage: NV12 (Y'CbCr 4:2:0) to ARGB8888 conversion and 90° rotations of ARGB8888, Planar8 and Planar16U buffers |
+| `panama-media-corefoundation` | `io.github.ghosthack.panama.media.corefoundation` | macOS CoreFoundation types (CFData, CFString, CFURL, CFNumber, CFDictionary, CFArray) and the Objective-C runtime calls the other macOS modules share |
+| `panama-media-cgimage` | `io.github.ghosthack.panama.media.cgimage` | macOS ImageIO/CoreGraphics still-image dimensions, decode, thumbnails, properties and EXIF, animated GIF, and encode/transcode |
+| `panama-media-avfoundation` | `io.github.ghosthack.panama.media.avfoundation` | macOS AVFoundation video/audio probing, poster-frame extraction, and sequential BGRA frame streaming |
 | `panama-media-opengl` | `io.github.ghosthack.panama.media.opengl` | Offscreen OpenGL contexts (CGL on macOS, WGL on Windows, EGL on Linux) and the texture, framebuffer, shader and pixel-buffer calls of a render-and-readback pipeline |
 
-The Windows family is designed for 64-bit Windows, `accelerate` for macOS, and
+The Windows family is designed for 64-bit Windows, the macOS family
+(`corefoundation`, `cgimage`, `avfoundation`, `accelerate`) for macOS, and
 `opengl` for macOS, Windows and Linux. Every module compiles on every
 operating system; platform-specific entry points report unavailable (or throw
 `UnsupportedOperationException`) elsewhere, and native smoke tests skip there.
-CI verifies the reactor on Windows x64 and Linux x64.
+CI verifies the reactor on Windows x64, Linux x64 and macOS arm64.
 
 ## Build
 
@@ -37,7 +41,7 @@ mvn install
 
 `verify` compiles and packages the complete public reactor. The project test
 suite is deliberately not included in this source snapshot. `install` makes
-the eight `0.1.3` artifacts available to another local Maven project.
+the eleven `0.1.4` artifacts available to another local Maven project.
 
 ## Use
 
@@ -48,7 +52,7 @@ For WIC, declare the top-level artifact; Maven brings in `core` and
 <dependency>
   <groupId>io.github.ghosthack</groupId>
   <artifactId>panama-media-wic</artifactId>
-  <version>0.1.3</version>
+  <version>0.1.4</version>
 </dependency>
 ```
 
@@ -75,7 +79,7 @@ Media Foundation is analogous:
 <dependency>
   <groupId>io.github.ghosthack</groupId>
   <artifactId>panama-media-mediafoundation</artifactId>
-  <version>0.1.3</version>
+  <version>0.1.4</version>
 </dependency>
 ```
 
@@ -85,6 +89,12 @@ decoder surface alignment and padding. Callers that demux compressed video
 themselves can use `MfVideoDecoder` for the lower-level path; its `Frame`
 retains the native NV12/P010 row stride and UV-plane offset while reporting
 the visible dimensions.
+
+On macOS, `ImageIO` (`cgimage`) mirrors the WIC API — for example
+`ImageIO.decodeFromPath(arena, "photo.heic")` — and
+`AVFoundation` (`avfoundation`) mirrors Media Foundation's `extractFrame` and
+adds `openVideo` for sequential frame streaming. Both bring in `core` and
+`corefoundation` transitively.
 
 `Accelerate` (macOS) is a raw vImage binding: each `vImage*` call returns the
 native `vImage_Error`, and buffers are caller-owned `vImage_Buffer` structs
@@ -109,7 +119,7 @@ FFM native access must be enabled for the binding modules used by the
 application. Enabling the complete public family is:
 
 ```text
---enable-native-access=io.github.ghosthack.panama.media.core,io.github.ghosthack.panama.media.comruntime,io.github.ghosthack.panama.media.fileassoc,io.github.ghosthack.panama.media.wic,io.github.ghosthack.panama.media.d3d11video,io.github.ghosthack.panama.media.mediafoundation,io.github.ghosthack.panama.media.accelerate,io.github.ghosthack.panama.media.opengl
+--enable-native-access=io.github.ghosthack.panama.media.core,io.github.ghosthack.panama.media.comruntime,io.github.ghosthack.panama.media.fileassoc,io.github.ghosthack.panama.media.wic,io.github.ghosthack.panama.media.d3d11video,io.github.ghosthack.panama.media.mediafoundation,io.github.ghosthack.panama.media.accelerate,io.github.ghosthack.panama.media.opengl,io.github.ghosthack.panama.media.corefoundation,io.github.ghosthack.panama.media.cgimage,io.github.ghosthack.panama.media.avfoundation
 ```
 
 The caller owns every `Arena` passed to a decode method and therefore controls

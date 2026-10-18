@@ -10,7 +10,10 @@ components supplied by the operating system:
   Component, Windows Media Foundation (`mfplat.dll`, `mfreadwrite.dll`),
   Direct3D 11 (`d3d11.dll`), and for OpenGL `opengl32.dll`, `user32.dll`,
   `gdi32.dll` and `kernel32.dll`
-- macOS: Accelerate.framework (vImage) and OpenGL.framework (CGL)
+- macOS: CoreFoundation.framework and the Objective-C runtime
+  (`libobjc.A.dylib`), ImageIO.framework, CoreGraphics.framework,
+  AVFoundation.framework, CoreMedia.framework, CoreVideo.framework,
+  Accelerate.framework (vImage) and OpenGL.framework (CGL)
 - Linux: the system EGL and OpenGL libraries (`libEGL.so.1`, and
   `libOpenGL.so.0` or `libGL.so.1`), typically Mesa or a GPU vendor driver
 
