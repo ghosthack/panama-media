@@ -49,6 +49,8 @@
         <module>io.github.ghosthack.panama.media.wic</module>
         <module>io.github.ghosthack.panama.media.d3d11video</module>
         <module>io.github.ghosthack.panama.media.mediafoundation</module>
+        <module>io.github.ghosthack.panama.media.accelerate</module>
+        <module>io.github.ghosthack.panama.media.opengl</module>
     </modules>
 
     <properties>

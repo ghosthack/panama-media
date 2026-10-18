@@ -3,13 +3,16 @@
 This repository distributes Java source only. It does not contain or bundle
 native libraries.
 
-The runtime modules use Java's Foreign Function and Memory API to call Windows
-system components supplied by the operating system:
+The runtime modules use Java's Foreign Function and Memory API to call system
+components supplied by the operating system:
 
-- Component Object Model runtime (`ole32.dll`)
-- Windows Imaging Component
-- Windows Media Foundation (`mfplat.dll`, `mfreadwrite.dll`)
-- Direct3D 11 (`d3d11.dll`)
+- Windows: Component Object Model runtime (`ole32.dll`), Windows Imaging
+  Component, Windows Media Foundation (`mfplat.dll`, `mfreadwrite.dll`),
+  Direct3D 11 (`d3d11.dll`), and for OpenGL `opengl32.dll`, `user32.dll`,
+  `gdi32.dll` and `kernel32.dll`
+- macOS: Accelerate.framework (vImage) and OpenGL.framework (CGL)
+- Linux: the system EGL and OpenGL libraries (`libEGL.so.1`, and
+  `libOpenGL.so.0` or `libGL.so.1`), typically Mesa or a GPU vendor driver
 
 Those system components are not redistributed by this project.
 
