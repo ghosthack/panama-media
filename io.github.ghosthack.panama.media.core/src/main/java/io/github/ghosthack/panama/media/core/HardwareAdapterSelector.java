@@ -39,12 +39,15 @@ public record HardwareAdapterSelector(
     }
 
     public static HardwareAdapterSelector parse(String value) {
-        if (value == null || value.isBlank()
-                || "default".equalsIgnoreCase(value)
-                || "auto".equalsIgnoreCase(value)) {
+        if (value == null || value.isBlank()) {
             return defaultAdapter();
         }
+        // Trim first: " default " or "auto\n" (a config file, an env var)
+        // must mean the same as the bare word, as " nvidia " already did.
         String text = value.trim().toLowerCase(Locale.ROOT);
+        if ("default".equals(text) || "auto".equals(text)) {
+            return defaultAdapter();
+        }
         if ("amd".equals(text) || "nvidia".equals(text) || "intel".equals(text)) {
             return namedVendor(text, value);
         }

@@ -178,7 +178,8 @@ public final class NativeLibraryLoader {
          *       non-blank, treat it as an absolute path. Return its lookup if
          *       the file exists; otherwise throw immediately.</li>
          *   <li>Probe the platform-appropriate candidate list in order; return
-         *       the lookup for the first existing file.</li>
+         *       the lookup for the first existing file that loads. A file that
+         *       exists but cannot be loaded is skipped.</li>
          *   <li>Try {@link System#loadLibrary} with the primary name, then each
          *       name from {@link #fallbackNames}; return
          *       {@link SymbolLookup#loaderLookup()} on the first success.</li>
@@ -186,7 +187,8 @@ public final class NativeLibraryLoader {
          *
          * @return a {@link SymbolLookup} over the loaded library
          * @throws UnsatisfiedLinkError if the system-property path is set but
-         *         missing, or if all candidates and fallback names fail
+         *         missing or unloadable, or if all candidates and fallback
+         *         names fail
          */
         public SymbolLookup load() {
             // Pre-load dependencies silently, in registration order
@@ -199,10 +201,16 @@ public final class NativeLibraryLoader {
                 String val = System.getProperty(propertyKey);
                 if (val != null && !val.isBlank()) {
                     Path p = Path.of(val);
-                    if (Files.isRegularFile(p))
+                    if (!Files.isRegularFile(p))
+                        throw new UnsatisfiedLinkError(
+                                propertyKey + " points to non-existent file: " + val);
+                    try {
                         return SymbolLookup.libraryLookup(p, Arena.global());
-                    throw new UnsatisfiedLinkError(
-                            propertyKey + " points to non-existent file: " + val);
+                    } catch (IllegalArgumentException e) {
+                        // An explicit override is never second-guessed.
+                        throw unloadable(propertyKey + " points to a file that cannot be loaded: "
+                                + val, e);
+                    }
                 }
             }
 
@@ -222,10 +230,19 @@ public final class NativeLibraryLoader {
                 candidates = new String[0];
             }
 
+            // A candidate that exists but does not load (wrong architecture, a
+            // missing dependency, a corrupt file) must not end the search: on a
+            // machine with both an arm64 and an x86-64 Homebrew, the first
+            // existing path is often the wrong one for this JVM.
+            StringBuilder skipped = new StringBuilder();
             for (String c : candidates) {
                 Path p = Path.of(c);
-                if (Files.isRegularFile(p))
+                if (!Files.isRegularFile(p)) continue;
+                try {
                     return SymbolLookup.libraryLookup(p, Arena.global());
+                } catch (IllegalArgumentException e) {
+                    skipped.append("; ").append(c).append(" exists but did not load");
+                }
             }
 
             // Step 3 — System.loadLibrary fallback
@@ -245,7 +262,13 @@ public final class NativeLibraryLoader {
 
             throw new UnsatisfiedLinkError(
                     "Could not load '" + primaryName + "'" +
-                    (last != null ? ": " + last.getMessage() : ""));
+                    (last != null ? ": " + last.getMessage() : "") + skipped);
+        }
+
+        private static UnsatisfiedLinkError unloadable(String message, Throwable cause) {
+            UnsatisfiedLinkError e = new UnsatisfiedLinkError(message);
+            e.initCause(cause);
+            return e;
         }
 
         /**

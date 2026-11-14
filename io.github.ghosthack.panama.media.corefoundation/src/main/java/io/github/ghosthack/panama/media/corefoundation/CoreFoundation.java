@@ -2,7 +2,9 @@ package io.github.ghosthack.panama.media.corefoundation;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.GroupLayout;
 import java.lang.foreign.Linker;
+import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
@@ -665,11 +667,38 @@ public final class CoreFoundation {
      * {@link FunctionDescriptor}. The descriptor must include the implicit
      * {@code (id self, SEL _cmd, ...)} parameters.
      *
+     * <p>On Intel Macs a method that returns a struct in memory (larger than
+     * 16 bytes, e.g. {@code CMTime} or {@code CGAffineTransform}) must be sent
+     * with {@code objc_msgSend_stret}: plain {@code objc_msgSend} would take the
+     * hidden return pointer for the receiver. The handle is bound to that
+     * entry point when {@link #needsStret} says so. arm64 has no such variant.
+     *
      * @param fd the full function descriptor including self and _cmd
      * @return a MethodHandle bound to objc_msgSend with the given signature
      */
     public static MethodHandle msgSend(FunctionDescriptor fd) {
+        if (needsStret(System.getProperty("os.arch", ""), fd)) {
+            MemorySegment stret = LOOKUP.find("objc_msgSend_stret")
+                    .orElseThrow(() -> new UnsatisfiedLinkError("objc_msgSend_stret not found"));
+            return LINKER.downcallHandle(stret, fd);
+        }
         return LINKER.downcallHandle(OBJC_MSG_SEND_ADDR, fd);
+    }
+
+    /**
+     * Whether a message with this descriptor needs {@code objc_msgSend_stret}
+     * on the given {@code os.arch}: x86-64 only, and only when the return value
+     * is a struct the SysV ABI returns in memory. Every struct the macOS
+     * modules return is made of naturally aligned integers and doubles, for
+     * which "in memory" is exactly "larger than 16 bytes".
+     */
+    static boolean needsStret(String osArch, FunctionDescriptor fd) {
+        boolean x86_64 = "x86_64".equals(osArch) || "amd64".equals(osArch);
+        if (!x86_64) {
+            return false;
+        }
+        MemoryLayout ret = fd.returnLayout().orElse(null);
+        return ret instanceof GroupLayout && ret.byteSize() > 16;
     }
 
     /**

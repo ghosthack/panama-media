@@ -82,6 +82,7 @@ public final class WGLContext implements GLContext {
     private static MethodHandle wglGetProcAddress;
     private static MethodHandle getLastError;
 
+    private final Thread owner = Thread.currentThread();
     private MemorySegment window;
     private MemorySegment dc;
     private MemorySegment context;
@@ -154,6 +155,12 @@ public final class WGLContext implements GLContext {
 
     @Override
     public void close() {
+        if (context == null && dc == null && window == null) return;
+        // wglDeleteContext, ReleaseDC and DestroyWindow all fail off the owning
+        // thread, which would leak the handles for good. Refuse before
+        // touching anything, so close() can still succeed on the right thread.
+        GL.requireOwner(owner, "WGLContext.close");
+        if (gl != null) gl.invalidate();
         try {
             if (context != null) {
                 int ignored = (int) wglMakeCurrent.invokeExact(MemorySegment.NULL, MemorySegment.NULL);

@@ -34,6 +34,7 @@ public final class CGLContext implements GLContext {
     private static MethodHandle destroyContext;
     private static MethodHandle errorString;
 
+    private final Thread owner = Thread.currentThread();
     private MemorySegment context;
     private final GL gl;
 
@@ -84,6 +85,10 @@ public final class CGLContext implements GLContext {
 
     /** The {@code CGLContextObj}, for {@code CGLTexImageIOSurface2D}. */
     public long handle() {
+        GL.requireOwner(owner, "CGLContext.handle");
+        if (context == null) {
+            throw new IllegalStateException("the OpenGL context is closed");
+        }
         return context.address();
     }
 
@@ -100,6 +105,10 @@ public final class CGLContext implements GLContext {
     @Override
     public void close() {
         if (context == null) return;
+        // Off-thread, this would clear the caller's current context and destroy
+        // one that is still current on its owner. Refuse before touching anything.
+        GL.requireOwner(owner, "CGLContext.close");
+        gl.invalidate();
         setCurrent(MemorySegment.NULL);
         destroy(context);
         context = null;

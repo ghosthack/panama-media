@@ -56,6 +56,7 @@ public final class EGLContext implements GLContext {
     private static MethodHandle getError;
     private static MethodHandle getProcAddress;
 
+    private final Thread owner = Thread.currentThread();
     private MemorySegment surface;
     private MemorySegment context;
     private GL gl;
@@ -127,6 +128,11 @@ public final class EGLContext implements GLContext {
     @Override
     public void close() {
         if (context == null && surface == null) return;
+        // Off-thread, eglMakeCurrent would unbind the caller's context and the
+        // destroy calls would only be deferred while this one stays current on
+        // its owner. Refuse before touching anything.
+        GL.requireOwner(owner, "EGLContext.close");
+        if (gl != null) gl.invalidate();
         try {
             int ignored = (int) makeCurrent.invokeExact(display, MemorySegment.NULL,
                     MemorySegment.NULL, MemorySegment.NULL);

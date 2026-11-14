@@ -457,6 +457,104 @@ public final class MediaFoundation {
         MemorySegment gIidId3d11Texture2d = null;
         MemorySegment gGuidNull = null;
 
+        // GUIDs. Built on every OS (plain memory, no native calls) so the values
+        // can be checked against the SDK headers by a test that runs anywhere.
+        Arena g = Arena.global();
+        byte[] mf = {(byte) 0x80, 0x00, 0x00, (byte) 0xAA, 0x00, 0x38, (byte) 0x9B, 0x71};
+
+        gMfMtMajorType = Ole32.guid(g, 0x48eba18e, (short) 0xf8c9, (short) 0x4687,
+                new byte[]{(byte) 0xbf, 0x11, 0x0a, 0x74, (byte) 0xc9, (byte) 0xf9, 0x6a, (byte) 0x8f});
+        gMfMtSubtype = Ole32.guid(g, 0xf7e34c9a, (short) 0x42e8, (short) 0x4714,
+                new byte[]{(byte) 0xb7, 0x4b, (byte) 0xcb, 0x29, (byte) 0xd7, 0x2c, 0x35, (byte) 0xe5});
+        gMfMediaTypeVideo = Ole32.guid(g, 0x73646976, (short) 0x0000, (short) 0x0010, mf);
+        gMfVideoFormatRgb32 = Ole32.guid(g, 0x00000016, (short) 0x0000, (short) 0x0010, mf);
+        gMfVideoFormatNv12 = Ole32.guid(g, 0x3231564E, (short) 0x0000, (short) 0x0010, mf);
+        gMfVideoFormatP010 = Ole32.guid(g, 0x30313050, (short) 0x0000, (short) 0x0010, mf);
+        gMfVideoFormatAv01 = Ole32.guid(g, 0x31305641, (short) 0x0000, (short) 0x0010, mf);
+        gMfVideoFormatVp80 = Ole32.guid(g, 0x30385056, (short) 0x0000, (short) 0x0010, mf);
+        gMfVideoFormatVp90 = Ole32.guid(g, 0x30395056, (short) 0x0000, (short) 0x0010, mf);
+        gMfVideoFormatH264 = Ole32.guid(g, 0x34363248, (short) 0x0000, (short) 0x0010, mf);
+        gMfVideoFormatHevc = Ole32.guid(g, 0x43564548, (short) 0x0000, (short) 0x0010, mf);
+        // MFVideoFormat_MPEG2 == MEDIASUBTYPE_MPEG2_VIDEO.
+        gMfVideoFormatMpeg2 = Ole32.guid(g,
+                0xE06D8026, (short) 0xDB46, (short) 0x11CF,
+                new byte[]{(byte) 0xB4, (byte) 0xD1, 0x00, (byte) 0x80,
+                           0x5F, 0x6C, (byte) 0xBB, (byte) 0xEA});
+        gMfVideoFormatMp4v = Ole32.guid(g, 0x5634504D, (short) 0x0000,
+                (short) 0x0010, mf);
+        gMfVideoFormatM4s2 = Ole32.guid(g, 0x3253344D, (short) 0x0000,
+                (short) 0x0010, mf);
+        gMfVideoFormatMjpg = Ole32.guid(g, 0x47504A4D, (short) 0x0000,
+                (short) 0x0010, mf);
+        gMfVideoFormatH263 = Ole32.guid(g, 0x33363248, (short) 0x0000,
+                (short) 0x0010, mf);
+        gMfVideoFormatWmv3 = Ole32.guid(g, 0x33564D57, (short) 0x0000,
+                (short) 0x0010, mf);
+        gMfVideoFormatWvc1 = Ole32.guid(g, 0x31435657, (short) 0x0000,
+                (short) 0x0010, mf);
+        gMfMtDefaultStride = Ole32.guid(g, 0x644B4E48, (short) 0x1E02, (short) 0x4516,
+                new byte[]{(byte) 0xB0, (byte) 0xEB, (byte) 0xC0, 0x1C,
+                           (byte) 0xA9, (byte) 0xD4, (byte) 0x9A, (byte) 0xC6});
+        gMfMtInterlaceMode = Ole32.guid(g, 0xE2724BB8, (short) 0xE676, (short) 0x4806,
+                new byte[]{(byte) 0xB4, (byte) 0xB2, (byte) 0xA8, (byte) 0xD6,
+                           (byte) 0xEF, (byte) 0xB4, 0x4C, (byte) 0xCD});
+        gMfMtPixelAspectRatio = Ole32.guid(g, 0xC6376A1E, (short) 0x8D0A, (short) 0x4027,
+                new byte[]{(byte) 0xBE, 0x45, 0x6D, (byte) 0x9A,
+                           0x0A, (byte) 0xD3, (byte) 0x9B, (byte) 0xB6});
+        gMfMtMinimumDisplayAperture = Ole32.guid(g, 0xD7388766, (short) 0x18FE, (short) 0x48C6,
+                new byte[]{(byte) 0xA1, 0x77, (byte) 0xEE, (byte) 0x89,
+                           0x48, 0x67, (byte) 0xC8, (byte) 0xC4});
+        gMfMtFrameSize = Ole32.guid(g, 0x1652c33d, (short) 0xd6b2, (short) 0x4012,
+                new byte[]{(byte) 0xb8, 0x34, 0x72, 0x03, 0x08, 0x49, (byte) 0xa3, 0x7d});
+        gMfMtVideoRotation = Ole32.guid(g, 0xC380465D, (short) 0x2271, (short) 0x428C,
+                new byte[]{(byte) 0x9B, (byte) 0x83, (byte) 0xEC, (byte) 0xEA, 0x3B, 0x4A, (byte) 0x85, (byte) 0xC1});
+        gMfMtFrameRate = Ole32.guid(g, 0xc459a2e8, (short) 0x3d2c, (short) 0x4e44,
+                new byte[]{(byte) 0xb1, 0x32, (byte) 0xfe, (byte) 0xe5, 0x15, 0x6c, 0x7b, (byte) 0xb0});
+        gMfMtMpegSequenceHeader = Ole32.guid(g,
+                0x3C036DE7, (short) 0x3AD0, (short) 0x4C9E,
+                new byte[]{(byte) 0x92, 0x16, (byte) 0xEE, 0x6D,
+                           0x6A, (byte) 0xC2, 0x1C, (byte) 0xB3});
+        gMfMtUserData = Ole32.guid(g,
+                0xB6BC765F, (short) 0x4C3B, (short) 0x40A4,
+                new byte[]{(byte) 0xBD, 0x51, 0x25, 0x35,
+                           (byte) 0xB6, 0x6F, (byte) 0xE0, (byte) 0x9D});
+        gMfMtAudioNumChannels = Ole32.guid(g, 0x37e48bf5, (short) 0x645e, (short) 0x4c5b,
+                new byte[]{(byte) 0x89, (byte) 0xde, (byte) 0xad, (byte) 0xa9, (byte) 0xe2, (byte) 0x9b, 0x69, 0x6a});
+        gMfMtAudioSamplesPerSecond = Ole32.guid(g, 0x5faeeae7, (short) 0x0290, (short) 0x4c31,
+                new byte[]{(byte) 0x9e, (byte) 0x8a, (byte) 0xc5, 0x34, (byte) 0xf6, (byte) 0x8d, (byte) 0x9d, (byte) 0xba});
+        gMfPdDuration = Ole32.guid(g, 0x6c990d33, (short) 0xbb8e, (short) 0x477a,
+                new byte[]{(byte) 0x85, (byte) 0x98, 0x0d, 0x5d, (byte) 0x96, (byte) 0xfc, (byte) 0xd8, (byte) 0x8a});
+        gMfSrEnableVideoProcessing = Ole32.guid(g,
+                0xFB394F3D, (short) 0xCCF1, (short) 0x42EE,
+                new byte[]{(byte) 0xBB, (byte) 0xB3, (byte) 0xF9, (byte) 0xB8, 0x45, (byte) 0xD5, 0x68, 0x1D});
+        gMfSrEnableAdvancedVideoProcessing = Ole32.guid(g,
+                0x0F81DA2C, (short) 0xB537, (short) 0x4672,
+                new byte[]{(byte) 0xA8, (byte) 0xB2, (byte) 0xA6, (byte) 0x81, (byte) 0xB1, 0x73, 0x07, (byte) 0xA3});
+        gMfRwEnableHardwareTransforms = Ole32.guid(g,
+                0xA634A91C, (short) 0x822B, (short) 0x41B9,
+                new byte[]{(byte) 0xA4, (byte) 0x94, 0x4D, (byte) 0xE4, 0x64, 0x36, 0x12, (byte) 0xB0});
+        gMftCategoryVideoDecoder = Ole32.guid(g,
+                0xD6C02D4B, (short) 0x6833, (short) 0x45B4,
+                new byte[]{(byte) 0x97, 0x1A, 0x05, (byte) 0xA4, (byte) 0xB0, 0x4B, (byte) 0xAB, (byte) 0x91});
+        gMfSrD3dManager = Ole32.guid(g,
+                0xEC822DA2, (short) 0xE1E9, (short) 0x4B29,
+                new byte[]{(byte) 0xA0, (byte) 0xD8, 0x56, 0x3C, 0x71, (byte) 0x9F, 0x52, 0x69});
+        gClsidCmsh264 = Ole32.guid(g, 0x62CE7E72, (short) 0x4C71, (short) 0x4d20,
+                new byte[]{(byte) 0xB1, 0x5D, 0x45, 0x28, 0x31, (byte) 0xA8, 0x7D, (byte) 0x9D});
+        gIidImfTransform = Ole32.guid(g, 0xbf94c121, (short) 0x5b05, (short) 0x4e6f,
+                new byte[]{(byte) 0x80, 0x00, (byte) 0xba, 0x59, (byte) 0x89, 0x61, 0x41, 0x4d});
+        gIidId3d10Mt = Ole32.guid(g, 0x9B7E4E00, (short) 0x342C, (short) 0x4106,
+                new byte[]{(byte) 0xA1, (byte) 0x9F, 0x4F, 0x27, 0x04, (byte) 0xF6, (byte) 0x89, (byte) 0xF0});
+        gIidImfDxgiBuffer = Ole32.guid(g,
+                0xe7174cfa, (short) 0x1c9e, (short) 0x48b1,
+                new byte[]{(byte) 0x88, 0x66, 0x62, 0x62,
+                           0x26, (byte) 0xbf, (byte) 0xc2, 0x58});
+        gIidId3d11Texture2d = Ole32.guid(g,
+                0x6f15aaf2, (short) 0xd208, (short) 0x4e89,
+                new byte[]{(byte) 0x9a, (byte) 0xb4, 0x48, (byte) 0x95,
+                           0x35, (byte) 0xd3, 0x4f, (byte) 0x9c});
+        gGuidNull = g.allocate(16); // zero-initialized
+
         if (IS_WINDOWS) {
             try {
                 System.loadLibrary("mfplat");
@@ -542,103 +640,6 @@ public final class MediaFoundation {
                                 ValueLayout.ADDRESS, ValueLayout.JAVA_INT,
                                 ValueLayout.JAVA_INT, ValueLayout.ADDRESS,
                                 ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
-
-                // GUIDs
-                Arena g = Arena.global();
-                byte[] mf = {(byte) 0x80, 0x00, 0x00, (byte) 0xAA, 0x00, 0x38, (byte) 0x9B, 0x71};
-
-                gMfMtMajorType = Ole32.guid(g, 0x48eba18e, (short) 0xf8c9, (short) 0x4687,
-                        new byte[]{(byte) 0xbf, 0x11, 0x0a, 0x74, (byte) 0xc9, (byte) 0xf9, 0x6a, 0x08});
-                gMfMtSubtype = Ole32.guid(g, 0xf7e34c9a, (short) 0x42e8, (short) 0x4714,
-                        new byte[]{(byte) 0xb7, 0x4b, (byte) 0xcb, 0x29, (byte) 0xd7, 0x2c, 0x35, (byte) 0xe5});
-                gMfMediaTypeVideo = Ole32.guid(g, 0x73646976, (short) 0x0000, (short) 0x0010, mf);
-                gMfVideoFormatRgb32 = Ole32.guid(g, 0x00000016, (short) 0x0000, (short) 0x0010, mf);
-                gMfVideoFormatNv12 = Ole32.guid(g, 0x3231564E, (short) 0x0000, (short) 0x0010, mf);
-                gMfVideoFormatP010 = Ole32.guid(g, 0x30313050, (short) 0x0000, (short) 0x0010, mf);
-                gMfVideoFormatAv01 = Ole32.guid(g, 0x31305641, (short) 0x0000, (short) 0x0010, mf);
-                gMfVideoFormatVp80 = Ole32.guid(g, 0x30385056, (short) 0x0000, (short) 0x0010, mf);
-                gMfVideoFormatVp90 = Ole32.guid(g, 0x30395056, (short) 0x0000, (short) 0x0010, mf);
-                gMfVideoFormatH264 = Ole32.guid(g, 0x34363248, (short) 0x0000, (short) 0x0010, mf);
-                gMfVideoFormatHevc = Ole32.guid(g, 0x43564548, (short) 0x0000, (short) 0x0010, mf);
-                // MFVideoFormat_MPEG2 == MEDIASUBTYPE_MPEG2_VIDEO.
-                gMfVideoFormatMpeg2 = Ole32.guid(g,
-                        0xE06D8026, (short) 0xDB46, (short) 0x11CF,
-                        new byte[]{(byte) 0xB4, (byte) 0xD1, 0x00, (byte) 0x80,
-                                   0x5F, 0x6C, (byte) 0xBB, (byte) 0xEA});
-                gMfVideoFormatMp4v = Ole32.guid(g, 0x5634504D, (short) 0x0000,
-                        (short) 0x0010, mf);
-                gMfVideoFormatM4s2 = Ole32.guid(g, 0x3253344D, (short) 0x0000,
-                        (short) 0x0010, mf);
-                gMfVideoFormatMjpg = Ole32.guid(g, 0x47504A4D, (short) 0x0000,
-                        (short) 0x0010, mf);
-                gMfVideoFormatH263 = Ole32.guid(g, 0x33363248, (short) 0x0000,
-                        (short) 0x0010, mf);
-                gMfVideoFormatWmv3 = Ole32.guid(g, 0x33564D57, (short) 0x0000,
-                        (short) 0x0010, mf);
-                gMfVideoFormatWvc1 = Ole32.guid(g, 0x31435657, (short) 0x0000,
-                        (short) 0x0010, mf);
-                gMfMtDefaultStride = Ole32.guid(g, 0x644B4E48, (short) 0x1E02, (short) 0x4516,
-                        new byte[]{(byte) 0xB0, (byte) 0xEB, (byte) 0xC0, 0x1C,
-                                   (byte) 0xA9, (byte) 0xD4, (byte) 0x9A, (byte) 0xC6});
-                gMfMtInterlaceMode = Ole32.guid(g, 0xE2724BB8, (short) 0xE676, (short) 0x4806,
-                        new byte[]{(byte) 0xB4, (byte) 0xB2, (byte) 0xA8, (byte) 0xD6,
-                                   (byte) 0xEF, (byte) 0xB4, 0x4C, (byte) 0xCD});
-                gMfMtPixelAspectRatio = Ole32.guid(g, 0xC6376A1E, (short) 0x8D0A, (short) 0x4027,
-                        new byte[]{(byte) 0xBE, 0x45, 0x6D, (byte) 0x9A,
-                                   0x0A, (byte) 0xD3, (byte) 0x9B, (byte) 0xB6});
-                gMfMtMinimumDisplayAperture = Ole32.guid(g, 0xD7388766, (short) 0x18FE, (short) 0x48C6,
-                        new byte[]{(byte) 0xA1, 0x77, (byte) 0xEE, (byte) 0x89,
-                                   0x48, 0x67, (byte) 0xC8, (byte) 0xC4});
-                gMfMtFrameSize = Ole32.guid(g, 0x1652c33d, (short) 0xd6b2, (short) 0x4012,
-                        new byte[]{(byte) 0xb8, 0x34, 0x72, 0x03, 0x08, 0x49, (byte) 0xa3, 0x7d});
-                gMfMtVideoRotation = Ole32.guid(g, 0xC380465D, (short) 0x2271, (short) 0x428C,
-                        new byte[]{(byte) 0x9B, (byte) 0x83, (byte) 0xEC, (byte) 0xEA, 0x3B, 0x4A, (byte) 0x85, (byte) 0xC1});
-                gMfMtFrameRate = Ole32.guid(g, 0xc459a2e8, (short) 0x3d2c, (short) 0x4e44,
-                        new byte[]{(byte) 0xb1, 0x32, (byte) 0xfe, (byte) 0xe5, 0x15, 0x6c, 0x7b, (byte) 0xb0});
-                gMfMtMpegSequenceHeader = Ole32.guid(g,
-                        0x3C036DE7, (short) 0x3AD0, (short) 0x4C9E,
-                        new byte[]{(byte) 0x92, 0x16, (byte) 0xEE, 0x6D,
-                                   0x6A, (byte) 0xC2, 0x1C, (byte) 0xB3});
-                gMfMtUserData = Ole32.guid(g,
-                        0xB6BC765F, (short) 0x4C3B, (short) 0x40A4,
-                        new byte[]{(byte) 0xBD, 0x51, 0x25, 0x35,
-                                   (byte) 0xB6, 0x6F, (byte) 0xE0, (byte) 0x9D});
-                gMfMtAudioNumChannels = Ole32.guid(g, 0x37e48bf5, (short) 0x645e, (short) 0x4c5b,
-                        new byte[]{(byte) 0x89, (byte) 0xde, (byte) 0xad, (byte) 0xa9, (byte) 0xe2, (byte) 0x9b, 0x69, 0x6a});
-                gMfMtAudioSamplesPerSecond = Ole32.guid(g, 0x5faeeae7, (short) 0x0290, (short) 0x4c31,
-                        new byte[]{(byte) 0x9e, (byte) 0x8a, (byte) 0xc5, 0x34, (byte) 0xf6, (byte) 0x8d, (byte) 0x9d, (byte) 0xba});
-                gMfPdDuration = Ole32.guid(g, 0x6c990d33, (short) 0xbb8e, (short) 0x477a,
-                        new byte[]{(byte) 0x85, (byte) 0x98, 0x0d, 0x5d, (byte) 0x96, (byte) 0xfc, (byte) 0xd8, (byte) 0x8a});
-                gMfSrEnableVideoProcessing = Ole32.guid(g,
-                        0xFB394F10, (short) 0xB8B0, (short) 0x11DF,
-                        new byte[]{(byte) 0x84, (byte) 0x80, 0x00, 0x24, (byte) 0xBE, (byte) 0xD1, (byte) 0xF3, (byte) 0xA0});
-                gMfSrEnableAdvancedVideoProcessing = Ole32.guid(g,
-                        0x0F81DA2C, (short) 0xB537, (short) 0x4672,
-                        new byte[]{(byte) 0xA8, (byte) 0xB2, (byte) 0xA6, (byte) 0x81, (byte) 0xB1, 0x73, 0x07, (byte) 0xA3});
-                gMfRwEnableHardwareTransforms = Ole32.guid(g,
-                        0xA634A91C, (short) 0x822B, (short) 0x41B9,
-                        new byte[]{(byte) 0xA4, (byte) 0x94, 0x4D, (byte) 0xE4, 0x64, 0x36, 0x12, (byte) 0xB0});
-                gMftCategoryVideoDecoder = Ole32.guid(g,
-                        0xD6C02D4B, (short) 0x6833, (short) 0x45B4,
-                        new byte[]{(byte) 0x97, 0x1A, 0x05, (byte) 0xA4, (byte) 0xB0, 0x4B, (byte) 0xAB, (byte) 0x91});
-                gMfSrD3dManager = Ole32.guid(g,
-                        0xEC822DA2, (short) 0xE1E9, (short) 0x4B29,
-                        new byte[]{(byte) 0xA0, (byte) 0xD8, 0x56, 0x3C, 0x71, (byte) 0x9F, 0x52, 0x69});
-                gClsidCmsh264 = Ole32.guid(g, 0x62CE7E72, (short) 0x4C71, (short) 0x4d20,
-                        new byte[]{(byte) 0xB1, 0x5D, 0x45, 0x28, 0x31, (byte) 0xA8, 0x7D, (byte) 0x9D});
-                gIidImfTransform = Ole32.guid(g, 0xbf94c121, (short) 0x5b05, (short) 0x4e6f,
-                        new byte[]{(byte) 0x80, 0x00, (byte) 0xba, 0x59, (byte) 0x89, 0x61, 0x41, 0x4d});
-                gIidId3d10Mt = Ole32.guid(g, 0x9B7E4E00, (short) 0x342C, (short) 0x4106,
-                        new byte[]{(byte) 0xA1, (byte) 0x9F, 0x4F, 0x27, 0x04, (byte) 0xF6, (byte) 0x89, (byte) 0xF0});
-                gIidImfDxgiBuffer = Ole32.guid(g,
-                        0xe7174cfa, (short) 0x1c9e, (short) 0x48b1,
-                        new byte[]{(byte) 0x88, 0x66, 0x62, 0x62,
-                                   0x26, (byte) 0xbf, (byte) 0xc2, 0x58});
-                gIidId3d11Texture2d = Ole32.guid(g,
-                        0x6f15aaf2, (short) 0xd208, (short) 0x4e89,
-                        new byte[]{(byte) 0x9a, (byte) 0xb4, 0x48, (byte) 0x95,
-                                   0x35, (byte) 0xd3, 0x4f, (byte) 0x9c});
-                gGuidNull = g.allocate(16); // zero-initialized
 
                 available = true;
             } catch (Throwable t) {
@@ -771,13 +772,25 @@ public final class MediaFoundation {
 
     private static void checkRegistryTransforms(StringBuilder sb) {
         try {
-            Process p = Runtime.getRuntime().exec(
-                    new String[] { "reg", "query",
-                            "HKLM\\SOFTWARE\\Microsoft\\Windows Media Foundation\\Transforms",
-                            "/s" });
-            int exitCode = p.waitFor();
+            // MFT registrations live under HKLM\\SOFTWARE\\Classes\\MediaFoundation
+            // (the "Microsoft\\Windows Media Foundation" key has no Transforms
+            // subkey, so querying it reported a healthy machine as missing them).
+            // Only the exit code matters, and the key alone answers it. The
+            // output is discarded rather than piped: an undrained pipe fills
+            // and blocks reg.exe, and with it waitFor(), forever.
+            Process p = new ProcessBuilder("reg", "query",
+                    "HKLM\\SOFTWARE\\Classes\\MediaFoundation\\Transforms")
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            if (!p.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                sb.append("REGISTRY_CHECK_FAILED: reg query timed out\n");
+                return;
+            }
+            int exitCode = p.exitValue();
             if (exitCode != 0) {
-                sb.append("REGISTRY_MISSING: HKLM\\SOFTWARE\\Microsoft\\Windows Media Foundation\\Transforms\n");
+                sb.append("REGISTRY_MISSING: HKLM\\SOFTWARE\\Classes\\MediaFoundation\\Transforms\n");
                 sb.append("  This registry hive contains MFT (Media Foundation Transform) registrations.\n");
                 sb.append("  Missing entries indicate Media Feature Pack is not installed.\n");
                 sb.append("\nTo fix:\n");
@@ -1087,7 +1100,8 @@ public final class MediaFoundation {
             SourceReaderHandles srh = createSourceReader(temp, path);
             try {
                 return decodeFrame(
-                        arena, temp, srh.reader(), timeMillis, maxEdge, observer);
+                        arena, temp, srh.reader(), srh.gpuVideoProcessing(),
+                        timeMillis, maxEdge, observer);
             } finally {
                 releaseSourceReader(srh);
             }
@@ -1215,8 +1229,11 @@ public final class MediaFoundation {
                 MF_MT_MINIMUM_DISPLAY_APERTURE,
                 area, 16, MemorySegment.NULL);
         if (!failed(hr)) {
-            int candidateX = area.get(ValueLayout.JAVA_SHORT, 0);
-            int candidateY = area.get(ValueLayout.JAVA_SHORT, 4);
+            // MFVideoArea { MFOffset OffsetX, OffsetY; SIZE Area; } with
+            // MFOffset { WORD fract; short value; }: the integer pixel
+            // offsets are the second word of each pair (bytes 2 and 6).
+            int candidateX = area.get(ValueLayout.JAVA_SHORT, 2);
+            int candidateY = area.get(ValueLayout.JAVA_SHORT, 6);
             int candidateWidth = area.get(ValueLayout.JAVA_INT, 8);
             int candidateHeight = area.get(ValueLayout.JAVA_INT, 12);
             if (candidateX >= 0 && candidateY >= 0
@@ -1310,6 +1327,9 @@ public final class MediaFoundation {
         private int height;         // display height (cropped output, before rotation)
         private int codedWidth;     // macroblock-coded width the decoder emits
         private int codedHeight;    // macroblock-coded height the decoder emits
+        private int cropX;          // display aperture origin within the coded frame
+        private int cropY;
+        private final MemorySegment apertureScratch = arena.allocate(16);
         private int rotationTurns;  // container display rotation, 90 CW quarter-turns
         private MemorySegment rotatedBgra = MemorySegment.NULL; // rotated output, when rotationTurns != 0
         private int rotatedBgraLen; // rotatedBgra capacity in ints (width*height)
@@ -1442,6 +1462,7 @@ public final class MediaFoundation {
                         vtable(decoderOutputType, 8), decoderOutputType,
                         MF_MT_FRAME_SIZE, pFrameSize);
                 check(hr, "GetUINT64(MF_MT_FRAME_SIZE)");
+                readCropOrigin(decoderOutputType);
             } finally {
                 release(decoderOutputType);
             }
@@ -1628,6 +1649,7 @@ public final class MediaFoundation {
                         // codedHeight (used to read the padded NV12 planes).
                         codedWidth = w;
                         codedHeight = h;
+                        readCropOrigin(newType);
                         if (width <= 0 || height <= 0) {
                             width = w;
                             height = h;
@@ -1639,6 +1661,30 @@ public final class MediaFoundation {
                 release(newType);
             }
             readStreamInfo();
+        }
+
+        /**
+         * Records where the displayed picture starts inside the decoder's
+         * coded frame, from the output type's
+         * {@code MF_MT_MINIMUM_DISPLAY_APERTURE}. A stream whose crop removes
+         * rows or columns at the top or left has a non-zero origin; reading
+         * from (0,0) would show the cropped-away border and lose the far
+         * edges. Absent or unreadable means (0,0).
+         */
+        private void readCropOrigin(MemorySegment mediaType) throws Throwable {
+            int x = 0;
+            int y = 0;
+            int hr = (int) IMFAttributes_GetBlob.invokeExact(
+                    vtable(mediaType, 15), mediaType,
+                    MF_MT_MINIMUM_DISPLAY_APERTURE,
+                    apertureScratch, 16, MemorySegment.NULL);
+            if (!failed(hr)) {
+                // MFOffset { WORD fract; short value; }: integer parts at 2 and 6.
+                x = apertureScratch.get(ValueLayout.JAVA_SHORT, 2);
+                y = apertureScratch.get(ValueLayout.JAVA_SHORT, 6);
+            }
+            cropX = Math.max(0, x);
+            cropY = Math.max(0, y);
         }
 
         /** Locks the decoded NV12 sample and converts it into the reusable {@link #bgra}. */
@@ -1669,8 +1715,12 @@ public final class MediaFoundation {
                     int stride = (totalRows > 0 && curLen % totalRows == 0)
                             ? curLen / totalRows : cw;
                     if (stride < cw) stride = cw;
+                    // Start at the aperture origin when the display rectangle
+                    // then still lies inside the coded frame; otherwise (0,0).
+                    int sx = cropX + width <= cw ? cropX : 0;
+                    int sy = cropY + height <= ch ? cropY : 0;
                     convertNV12intoBGRA(data.reinterpret(curLen), stride, ch,
-                            width, height, bgra);
+                            sx, sy, width, height, bgra);
                     if (rotationTurns != 0) applyRotation();
                 } finally {
                     try {
@@ -1755,8 +1805,14 @@ public final class MediaFoundation {
      * call (which, under the thumbnail pool, exhausts GPU/hardware-decoder
      * resources and makes later extractions fail intermittently).
      */
+    /**
+     * @param gpuVideoProcessing whether the reader was created with a D3D
+     *        manager and {@code ENABLE_ADVANCED_VIDEO_PROCESSING}: only then
+     *        can it scale (and does it rotate) its RGB32 output
+     */
     private record SourceReaderHandles(MemorySegment reader, MemorySegment device,
-                                       MemorySegment context, MemorySegment manager) {}
+                                       MemorySegment context, MemorySegment manager,
+                                       boolean gpuVideoProcessing) {}
 
     /**
      * Releases a Source Reader and the D3D11 device/context/DXGI manager that
@@ -1839,12 +1895,19 @@ public final class MediaFoundation {
                 }
             }
 
-            // MSDN: when D3D manager is set, use ENABLE_VIDEO_PROCESSING
-            // (ENABLE_ADVANCED_VIDEO_PROCESSING is ignored with D3D)
+            // The two video-processing switches are not interchangeable:
+            // ENABLE_VIDEO_PROCESSING (the software converter) cannot be
+            // combined with a D3D manager — MFCreateSourceReaderFromURL
+            // rejects the pair with E_INVALIDARG — and with a D3D manager
+            // the GPU-capable ENABLE_ADVANCED_VIDEO_PROCESSING is the one
+            // that converts decoder output to RGB32.
+            boolean d3dManagerSet = !MemorySegment.NULL.equals(dxgiManager) && !failed(hr);
+            MemorySegment videoProcessingKey = d3dManagerSet
+                    ? MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING
+                    : MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING;
             hr = (int) IMFAttributes_SetUINT32.invokeExact(
-                    vtable(attrs, 21), attrs,
-                    MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1);
-            check(hr, "SetUINT32(ENABLE_VIDEO_PROCESSING)");
+                    vtable(attrs, 21), attrs, videoProcessingKey, 1);
+            check(hr, "SetUINT32(ENABLE_[ADVANCED_]VIDEO_PROCESSING)");
 
             MemorySegment wpath = wstr(temp, path);
             MemorySegment ppReader = temp.allocate(ValueLayout.ADDRESS);
@@ -1852,7 +1915,7 @@ public final class MediaFoundation {
             check(hr, "MFCreateSourceReaderFromURL");
             MemorySegment reader = ppReader.get(ValueLayout.ADDRESS, 0);
             handedOff = true;
-            return new SourceReaderHandles(reader, d3dDevice, d3dContext, dxgiManager);
+            return new SourceReaderHandles(reader, d3dDevice, d3dContext, dxgiManager, d3dManagerSet);
         } finally {
             release(attrs);
             if (!handedOff) {
@@ -1966,21 +2029,20 @@ public final class MediaFoundation {
     }
 
     /**
-     * Maps an {@code MF_MT_VIDEO_ROTATION} value to 90&deg; <b>clockwise</b>
-     * quarter-turns (0..3) to apply for upright display. The attribute is a
-     * {@code MFVideoRotationFormat} (0/90/180/270) measured <b>counterclockwise</b>
-     * — the same convention the (correct) pure backend reads from the container as
-     * {@code rotationDegreesCcw} — so {@code N} degrees CCW is undone by
-     * {@code (4 - N/90)} quarter-turns clockwise. With this, a portrait phone clip
-     * decodes upright, matching the poster and the Apple/pure backends.
+     * Maps an {@code MF_MT_VIDEO_ROTATION} value (0/90/180/270) to the 90&deg;
+     * <b>clockwise</b> quarter-turns (0..3) to apply for upright display:
+     * {@code N} degrees means {@code N / 90} clockwise turns.
      *
-     * <p><b>Direction note:</b> if a Windows tester ever finds rotated clips land
-     * 180&deg; off (90 vs 270 swapped), this single mapping is the one knob — flip
-     * to {@code (degreesCcw / 90) & 3}. Everything else is direction-agnostic.</p>
+     * <p>Measured on Windows 11 against clips written with ffmpeg's
+     * {@code -display_rotation 90/180/270}, with the macOS (AVFoundation)
+     * poster of the same file as the reference: a clip whose display matrix
+     * asks for a 90&deg; counterclockwise turn reports {@code 270} here, and
+     * three clockwise turns reproduce the reference. The earlier
+     * {@code (4 - N / 90)} mapping left 90&deg; and 270&deg; clips upside
+     * down.</p>
      */
-    static int rotationQuarterTurnsCwFromMf(int degreesCcw) {
-        int q = (degreesCcw / 90) & 3;
-        return (4 - q) & 3;
+    static int rotationQuarterTurnsCwFromMf(int degrees) {
+        return (degrees / 90) & 3;
     }
 
     /**
@@ -2031,6 +2093,40 @@ public final class MediaFoundation {
         MemorySegment out = arena.allocate((long) ow * oh * RGBA_BPP);
         MemorySegment.copy(dst, 0, out, ValueLayout.JAVA_INT, 0, dst.length);
         return new DecodedImage<>(out, ow, oh, ow * RGBA_BPP, PixelFormat.BGRA);
+    }
+
+    /** Sets the alpha byte of every pixel of a tightly packed BGRA image to 255, in place. */
+    static DecodedImage<PixelFormat> opaque(DecodedImage<PixelFormat> image) {
+        MemorySegment pixels = image.pixels();
+        long bytes = (long) image.stride() * image.height();
+        for (long i = 3; i < bytes; i += RGBA_BPP) {
+            pixels.set(ValueLayout.JAVA_BYTE, i, (byte) 0xFF);
+        }
+        return image;
+    }
+
+    /**
+     * The clockwise quarter-turns the reader's <em>current output type</em>
+     * still asks for, from its {@code MF_MT_VIDEO_ROTATION}; 0 when absent or
+     * unreadable.
+     */
+    private static int currentOutputTurns(Arena temp, MemorySegment reader) {
+        try {
+            MemorySegment pp = temp.allocate(ValueLayout.ADDRESS);
+            int hr = (int) IMFSourceReader_GetCurrentMediaType.invokeExact(
+                    vtable(reader, 6), reader,
+                    MF_SOURCE_READER_FIRST_VIDEO_STREAM, pp);
+            if (failed(hr)) return 0;
+            MemorySegment type = pp.get(ValueLayout.ADDRESS, 0);
+            if (MemorySegment.NULL.equals(type)) return 0;
+            try {
+                return rotationQuarterTurnsCwFromMf(getUint32(temp, type, MF_MT_VIDEO_ROTATION));
+            } finally {
+                release(type);
+            }
+        } catch (Throwable t) {
+            return 0;
+        }
     }
 
     /** Reads MF_MT_SUBTYPE from a media type and maps it to a codec name, or null. */
@@ -2140,19 +2236,26 @@ public final class MediaFoundation {
      */
     private static DecodedImage<PixelFormat> decodeFrame(Arena arena, Arena temp,
                                                                    MemorySegment reader,
+                                                                   boolean readerScales,
                                                                    long timeMillis,
                                                                    int maxEdge,
                                                                    FrameDecodeObserver observer)
             throws Throwable {
         // Container display rotation, baked into the returned poster so Windows
         // tiles are upright (matching playback / the other backends). Best-effort.
-        int qcw = readRotationCw(temp, reader);
+        int nativeTurns = readRotationCw(temp, reader);
+        // Display size of the stored (un-rotated) picture. Re-oriented below
+        // once the output type shows whether the reader rotates for us.
         FrameDimensions sourceDisplay =
                 nativeDisplayDimensions(temp, reader);
         FrameDimensions reducedDisplay =
                 fittedDisplayDimensions(sourceDisplay, maxEdge);
+        // Only the GPU video processor resizes. The software converter
+        // (no D3D manager) does colour conversion only: given a smaller
+        // MF_MT_FRAME_SIZE it either ignores it or drops out of the pipeline
+        // and hands back raw decoder output, so the hint is not sent.
         boolean reductionRequested =
-                !reducedDisplay.equals(sourceDisplay);
+                readerScales && !reducedDisplay.equals(sourceDisplay);
         boolean reductionAccepted = false;
         boolean useNV12 = false;
         // Create output media type requesting RGB32
@@ -2215,6 +2318,19 @@ public final class MediaFoundation {
                         observer, outputStrategy, false, outputStarted,
                         failureSummary(failure));
                 throw failure;
+            }
+
+            // With a D3D manager the reader's video processor applies the
+            // container rotation itself and hands back an already-rotated
+            // surface (frame size swapped for 90/270, MF_MT_VIDEO_ROTATION 0
+            // on the output type). Without one it leaves the picture as stored
+            // and keeps the rotation on the output type. Every size from here
+            // on is in the orientation of the surface the reader delivers.
+            if ((nativeTurns & 1) == 1
+                    && currentOutputTurns(temp, reader) != nativeTurns) {
+                sourceDisplay = new FrameDimensions(
+                        sourceDisplay.height(), sourceDisplay.width());
+                reducedDisplay = fittedDisplayDimensions(sourceDisplay, maxEdge);
             }
 
             // Native poster downscale (Source Reader path): the reader has video
@@ -2339,14 +2455,34 @@ public final class MediaFoundation {
 
                 FrameDimensions surface;
                 VisibleArea visible;
+                // The rotation still to apply is whatever the output type
+                // carries: 0 when the reader has already rotated the surface.
+                int qcw;
                 try {
+                    qcw = rotationQuarterTurnsCwFromMf(
+                            getUint32(temp, currentType, MF_MT_VIDEO_ROTATION));
                     surface = frameDimensions(temp, currentType);
+                    // Trust the surface, not the HRESULT: a reader can accept
+                    // a smaller frame size and still deliver the full picture,
+                    // and cropping that to the reduced size would return its
+                    // top-left corner.
+                    boolean surfaceReduced =
+                            surface.width() < sourceDisplay.width()
+                                    || surface.height() < sourceDisplay.height();
                     FrameDimensions expected =
-                            reductionAccepted
+                            reductionAccepted && surfaceReduced
                                     ? reducedDisplay
                                     : sourceDisplay;
                     visible = visibleArea(
                             temp, currentType, surface, expected);
+                    if (DEBUG) {
+                        System.err.println("[MF] SR output: " + (useNV12 ? "NV12" : "RGB32")
+                                + " surface " + surface.width() + "x" + surface.height()
+                                + " visible " + visible
+                                + " source display " + sourceDisplay.width() + "x" + sourceDisplay.height()
+                                + " container rotation " + nativeTurns + " cw turn(s), "
+                                + qcw + " left for us to apply");
+                    }
                 } finally {
                     release(currentType);
                 }
@@ -2381,10 +2517,12 @@ public final class MediaFoundation {
                             "Pixel buffer too small: expected " + expectedLen
                                     + " bytes, got " + curLen);
 
+                // MFVideoFormat_RGB32 is X8R8G8B8: the fourth byte is undefined
+                // (the software converter leaves it 0). Video is opaque.
                 return rotateDecoded(
                         arena,
-                        copyVisibleBgra(
-                                srcPixels, stride, visible, arena),
+                        opaque(copyVisibleBgra(
+                                srcPixels, stride, visible, arena)),
                         qcw);
             } finally {
                 // Unlock -- best-effort
@@ -2529,9 +2667,8 @@ public final class MediaFoundation {
                 ensureComReady();
                 ensurePlatformStarted();
                 int hr;
-                // Enumerate ALL video decoders: sync, async, hardware, field-of-use
-                int flags = 0x3F; // MFT_ENUM_FLAG_SYNCMFT | ASYNCMFT | HARDWARE
-                                  // | FIELDOFUSE | LOCALMFT | SORTANDFILTER
+                // Enumerate every video decoder, unsorted (MFT_ENUM_FLAG_ALL).
+                int flags = MFT_ENUM_FLAG_ALL;
                 MemorySegment ppActivate = arena.allocate(ValueLayout.ADDRESS);
                 MemorySegment pCount = arena.allocate(ValueLayout.JAVA_INT);
 
@@ -2614,6 +2751,24 @@ public final class MediaFoundation {
 
     // -- Decoder discovery via MFTEnumEx + IMFActivate -------------------------
 
+    // MFT_ENUM_FLAG_* (mfapi.h)
+    static final int MFT_ENUM_FLAG_SYNCMFT = 0x01;
+    static final int MFT_ENUM_FLAG_ASYNCMFT = 0x02;
+    static final int MFT_ENUM_FLAG_HARDWARE = 0x04;
+    static final int MFT_ENUM_FLAG_FIELDOFUSE = 0x08;
+    static final int MFT_ENUM_FLAG_LOCALMFT = 0x10;
+    static final int MFT_ENUM_FLAG_TRANSCODE_ONLY = 0x20;
+    static final int MFT_ENUM_FLAG_SORTANDFILTER = 0x40;
+    /**
+     * {@code MFT_ENUM_FLAG_ALL} (0x3F): every kind including transcode-only,
+     * and <em>without</em> {@code SORTANDFILTER} — the list comes back
+     * unsorted and unfiltered.
+     */
+    static final int MFT_ENUM_FLAG_ALL = 0x3F;
+    /** Synchronous MFTs only, sorted and filtered: what the raw-sample path can drive. */
+    static final int MFT_ENUM_SYNC_SORTED = MFT_ENUM_FLAG_SYNCMFT | MFT_ENUM_FLAG_FIELDOFUSE
+            | MFT_ENUM_FLAG_LOCALMFT | MFT_ENUM_FLAG_SORTANDFILTER;
+
     /**
      * Finds and activates a video decoder MFT for the given native media type.
      * <p>
@@ -2632,9 +2787,10 @@ public final class MediaFoundation {
         int hr = (int) IMFAttributes_GetGUID.invokeExact(
                 vtable(nativeType, 10), nativeType, MF_MT_SUBTYPE, subtype);
         if (failed(hr)) return MemorySegment.NULL;
-        // Keep this path's historical behavior (all MFT kinds, SORTANDFILTER
-        // ranking) — the sync-first preference below is for the raw-sample path.
-        return activateDecoderForSubtype(temp, subtype, 0x3F);
+        // Keep this path's historical behavior: MFT_ENUM_FLAG_ALL, i.e. every
+        // MFT kind in enumeration order with no SORTANDFILTER ranking. The
+        // sync-first preference below is for the raw-sample path.
+        return activateDecoderForSubtype(temp, subtype, MFT_ENUM_FLAG_ALL);
     }
 
     /**
@@ -2655,11 +2811,9 @@ public final class MediaFoundation {
         // e.g. the AV1 Video Extension) — async hardware MFTs require the
         // event-driven protocol the raw-sample path does not speak. Fall back
         // to the full set if no sync MFT matches.
-        MemorySegment decoder = activateDecoderForSubtype(temp, subtype,
-                0x59 /* SYNCMFT | FIELDOFUSE | LOCALMFT | SORTANDFILTER */);
+        MemorySegment decoder = activateDecoderForSubtype(temp, subtype, MFT_ENUM_SYNC_SORTED);
         if (MemorySegment.NULL.equals(decoder)) {
-            decoder = activateDecoderForSubtype(temp, subtype,
-                    0x3F /* + ASYNCMFT | HARDWARE */);
+            decoder = activateDecoderForSubtype(temp, subtype, MFT_ENUM_FLAG_ALL);
         }
         return decoder;
     }
@@ -2677,18 +2831,22 @@ public final class MediaFoundation {
         MemorySegment ppActivate = temp.allocate(ValueLayout.ADDRESS);
         MemorySegment pCount = temp.allocate(ValueLayout.JAVA_INT);
 
-        // Enumerate all decoder types: sync, async, hardware, field-of-use
-        int flags = 0x3F; // SYNCMFT | ASYNCMFT | HARDWARE | FIELDOFUSE | LOCALMFT | SORTANDFILTER
         hr = (int) H_MFT_ENUM_EX.invokeExact(
-                MFT_CATEGORY_VIDEO_DECODER, flags,
+                MFT_CATEGORY_VIDEO_DECODER, enumFlags,
                 inputFilter, MemorySegment.NULL,
                 ppActivate, pCount);
         if (failed(hr)) return MemorySegment.NULL;
 
+        // MFTEnumEx allocates the IMFActivate* array with CoTaskMemAlloc; the
+        // caller releases each pointer and then frees the array.
+        MemorySegment rawArray = ppActivate.get(ValueLayout.ADDRESS, 0);
         int count = pCount.get(ValueLayout.JAVA_INT, 0);
-        if (count == 0) return MemorySegment.NULL;
+        if (count == 0 || MemorySegment.NULL.equals(rawArray)) {
+            Ole32.coTaskMemFree(rawArray);
+            return MemorySegment.NULL;
+        }
 
-        MemorySegment array = ppActivate.get(ValueLayout.ADDRESS, 0)
+        MemorySegment array = rawArray
                 .reinterpret((long) count * ValueLayout.ADDRESS.byteSize());
 
         // Try each activation object until one succeeds
@@ -2715,6 +2873,7 @@ public final class MediaFoundation {
             }
             release(activate);
         }
+        Ole32.coTaskMemFree(rawArray);
 
         return decoder;
     }
@@ -3262,12 +3421,23 @@ public final class MediaFoundation {
                                     surface =
                                             frameDimensions(
                                                     temp, newOutType);
+                                    // A decoder can accept the downscale hint
+                                    // and then announce, through this stream
+                                    // change, that it is emitting the full
+                                    // picture after all. Cropping that to the
+                                    // reduced size would return its top-left
+                                    // corner, so go by the new surface.
+                                    boolean surfaceReduced =
+                                            surface.width() < sourceDisplay.width()
+                                                    || surface.height() < sourceDisplay.height();
                                     visible =
                                             visibleArea(
                                                     temp,
                                                     newOutType,
                                                     surface,
-                                                    expectedDisplay);
+                                                    surfaceReduced
+                                                            ? expectedDisplay
+                                                            : sourceDisplay);
                                     width = surface.width();
                                     height = surface.height();
                                     MemorySegment pNewSI = temp.allocate(12);

@@ -6,15 +6,16 @@
     <parent>
         <groupId>io.github.ghosthack</groupId>
         <artifactId>panama-media-parent</artifactId>
-        <version>0.1.4</version>
+        <version>0.1.5</version>
     </parent>
     <artifactId>panama-media-core</artifactId>
     <packaging>jar</packaging>
     <name>panama-media-core</name>
     <description>
-        Shared utilities for panama-media modules: NativeLibraryLoader,
-        DecodedImage, ImageDimensions. Not a consumer-facing API —
-        an implementation module consumed only by other panama-media jars.
+        Shared types for panama-media modules: the DecodedImage, PixelFormat
+        and ImageDimensions types that the binding modules return, plus
+        NativeLibraryLoader. Normally reached transitively through a binding
+        module rather than declared directly.
     </description>
     <properties>
         <module.name>io.github.ghosthack.panama.media.core</module.name>

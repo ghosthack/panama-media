@@ -136,6 +136,7 @@ public final class ImageIO {
     /** See {@link #getSize(byte[])}. */
     public static Dimensions getSize(MemorySegment imageData, long size) {
         ensureAvailable();
+        requireReadable(imageData, size);
         MemorySegment cfData = CoreFoundation.cfDataCreateNoCopy(
                 MemorySegment.NULL, imageData, size, CoreFoundation.kCFAllocatorNull());
         if (MemorySegment.NULL.equals(cfData))
@@ -203,6 +204,7 @@ public final class ImageIO {
     /** See {@link #getOrientation(byte[])}. */
     public static int getOrientation(MemorySegment imageData, long size) {
         ensureAvailable();
+        requireReadable(imageData, size);
         MemorySegment cfData = CoreFoundation.cfDataCreateNoCopy(
                 MemorySegment.NULL, imageData, size, CoreFoundation.kCFAllocatorNull());
         if (MemorySegment.NULL.equals(cfData))
@@ -540,6 +542,7 @@ public final class ImageIO {
     /** See {@link #readProperties(byte[])}. */
     public static ImageProperties readProperties(MemorySegment imageData, long size) {
         ensureAvailable();
+        requireReadable(imageData, size);
         MemorySegment cfData = CoreFoundation.cfDataCreateNoCopy(
                 MemorySegment.NULL, imageData, size, CoreFoundation.kCFAllocatorNull());
         if (MemorySegment.NULL.equals(cfData))
@@ -756,6 +759,7 @@ public final class ImageIO {
     /** See {@link #decode(Arena, byte[])}. */
     public static DecodedImage<PixelFormat> decode(Arena arena, MemorySegment imageData, long size) {
         ensureAvailable();
+        requireReadable(imageData, size);
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment cfData = CoreFoundation.cfDataCreateNoCopy(
                     MemorySegment.NULL, imageData, size, CoreFoundation.kCFAllocatorNull());
@@ -857,6 +861,7 @@ public final class ImageIO {
             Arena arena, MemorySegment imageData, long size, int maxPixelSize,
             InterpolationQuality quality) {
         ensureAvailable();
+        requireReadable(imageData, size);
         requirePositive(maxPixelSize);
         requireQuality(quality);
 
@@ -1237,7 +1242,7 @@ public final class ImageIO {
     public static void encodeToPath(MemorySegment pixels, int width, int height, int stride,
                                     String path, String uti, float quality, int orientation) {
         ensureAvailable();
-        validateEncodeArgs(width, height, stride, uti);
+        validateEncodeArgs(pixels, width, height, stride, uti);
 
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment cgImage = createCGImageFromBGRA(pixels, width, height, stride);
@@ -1278,7 +1283,7 @@ public final class ImageIO {
     public static byte[] encodeToBytes(MemorySegment pixels, int width, int height, int stride,
                                        String uti, float quality, int orientation) {
         ensureAvailable();
-        validateEncodeArgs(width, height, stride, uti);
+        validateEncodeArgs(pixels, width, height, stride, uti);
 
         try (Arena arena = Arena.ofConfined()) {
             MemorySegment cgImage = createCGImageFromBGRA(pixels, width, height, stride);
@@ -1353,7 +1358,8 @@ public final class ImageIO {
                 int loopCount = readGifLoopCount(src);
                 int canvasWidth = 0;
                 int canvasHeight = 0;
-                List<GifFrameData> frames = new ArrayList<>((int) count);
+                List<GifFrameData> frames = new ArrayList<>((int) Math.min(count, 1024));
+                long pixelsSoFar = 0;
 
                 for (long i = 0; i < count; i++) {
                     int delayMs = readGifFrameDelay(src, i);
@@ -1367,8 +1373,20 @@ public final class ImageIO {
                         if (MemorySegment.NULL.equals(cgImg))
                             throw new DecodeException("Failed to decode frame " + i + " of: " + path);
 
-                        int iw = (int) CGImage.getWidth(cgImg);
-                        int ih = (int) CGImage.getHeight(cgImg);
+                        long rawW = CGImage.getWidth(cgImg);
+                        long rawH = CGImage.getHeight(cgImg);
+                        if (rawW > Integer.MAX_VALUE || rawH > Integer.MAX_VALUE)
+                            throw new DecodeException("Frame " + i + " too large: "
+                                    + rawW + "x" + rawH + " in: " + path);
+                        int iw = (int) rawW;
+                        int ih = (int) rawH;
+                        // Bounds the frame (so stride * ih below fits an int)
+                        // and the animation as a whole, before allocating.
+                        try {
+                            pixelsSoFar = ImageDimensions.addAnimationFrame(pixelsSoFar, iw, ih);
+                        } catch (IllegalArgumentException e) {
+                            throw new DecodeException(e.getMessage() + " (frame " + i + " of: " + path + ")", e);
+                        }
                         if (i == 0) { canvasWidth = iw; canvasHeight = ih; }
 
                         colorSpace = CGColorSpace.createDeviceRGB();
@@ -1387,7 +1405,7 @@ public final class ImageIO {
                         CoreFoundation.cfRelease(ctx);
                         ctx = MemorySegment.NULL;
 
-                        byte[] pixelBytes = new byte[stride * ih];
+                        byte[] pixelBytes = new byte[Math.toIntExact((long) stride * ih)];
                         MemorySegment.copy(pixelSeg, ValueLayout.JAVA_BYTE, 0,
                                 pixelBytes, 0, pixelBytes.length);
 
@@ -1488,15 +1506,37 @@ public final class ImageIO {
         }
     }
 
-    private static void validateEncodeArgs(int width, int height, int stride, String uti) {
+    private static void validateEncodeArgs(MemorySegment pixels, int width, int height,
+                                           int stride, String uti) {
         if (uti == null || uti.isEmpty())
             throw new IllegalArgumentException("uti must be non-empty");
-        if (width <= 0 || height <= 0)
-            throw new IllegalArgumentException("Invalid dimensions: " + width + "x" + height);
-        if (stride < width * RGBA_BPP)
+        ImageDimensions.validateDimensions(width, height);
+        if (stride < (long) width * RGBA_BPP)
             throw new IllegalArgumentException(
                     "stride " + stride + " too small for width " + width);
-        ImageDimensions.validateDimensions(width, height);
+        // CoreGraphics reads stride * height bytes from the raw address.
+        java.util.Objects.requireNonNull(pixels, "pixels");
+        if (!pixels.isNative())
+            throw new IllegalArgumentException("pixels must be a native (off-heap) segment");
+        long needed = (long) stride * height;
+        if (needed > pixels.byteSize())
+            throw new IndexOutOfBoundsException(
+                    "pixels holds " + pixels.byteSize() + " bytes; " + width + "x" + height
+                    + " at stride " + stride + " needs " + needed);
+    }
+
+    /**
+     * Rejects a caller-supplied {@code (imageData, size)} pair the native side
+     * would read past: ImageIO is handed the raw address, so nothing below
+     * this point can bounds-check it.
+     */
+    private static void requireReadable(MemorySegment imageData, long size) {
+        java.util.Objects.requireNonNull(imageData, "imageData");
+        if (!imageData.isNative())
+            throw new IllegalArgumentException("imageData must be a native (off-heap) segment");
+        if (size < 0 || size > imageData.byteSize())
+            throw new IndexOutOfBoundsException(
+                    "size " + size + " out of bounds for a segment of " + imageData.byteSize() + " bytes");
     }
 
     /**

@@ -463,6 +463,12 @@ public final class AVFoundation {
         return AVAILABLE;
     }
 
+    // The one-shot entry points below create autoreleased Objective-C objects
+    // (NSURL, AVURLAsset, AVAssetImageGenerator, track arrays). A Java thread
+    // has no autorelease pool of its own, so without one those objects — and
+    // the files and decoder state they hold — live until the thread exits.
+    // Each public method therefore runs its body inside its own pool.
+
     /**
      * Returns video metadata for the file at the given path.
      *
@@ -474,6 +480,15 @@ public final class AVFoundation {
      */
     public static VideoInfo getVideoInfo(Arena arena, String path) {
         ensureAvailable();
+        MemorySegment pool = CoreFoundation.autoreleasePoolPush();
+        try {
+            return getVideoInfoInPool(path);
+        } finally {
+            CoreFoundation.autoreleasePoolPop(pool);
+        }
+    }
+
+    private static VideoInfo getVideoInfoInPool(String path) {
         try (Arena temp = Arena.ofConfined()) {
             // 1. Create CFString from path and NSURL
             MemorySegment cfPath = CoreFoundation.cfStringCreate(temp, path);
@@ -529,6 +544,22 @@ public final class AVFoundation {
                         width = (int) Math.round(w);
                         height = (int) Math.round(h);
 
+                        // naturalSize is the stored size; report what is
+                        // displayed, as extractFrame and openVideo deliver it.
+                        MemorySegment xform = (MemorySegment) MSG_SEND_RET_CGAFFINETRANSFORM.invokeExact(
+                                (SegmentAllocator) temp, track,
+                                CoreFoundation.selRegisterName(temp, "preferredTransform"));
+                        DisplayOrientation orientation = displayOrientation(
+                                xform.get(ValueLayout.JAVA_DOUBLE, 0),
+                                xform.get(ValueLayout.JAVA_DOUBLE, 8),
+                                xform.get(ValueLayout.JAVA_DOUBLE, 16),
+                                xform.get(ValueLayout.JAVA_DOUBLE, 24));
+                        if (orientation.swapsDimensions()) {
+                            int swap = width;
+                            width = height;
+                            height = swap;
+                        }
+
                         // 8. [track nominalFrameRate] -> float
                         MemorySegment selFrameRate = CoreFoundation.selRegisterName(temp, "nominalFrameRate");
                         frameRate = (float) MSG_SEND_RET_FLOAT.invokeExact(
@@ -562,6 +593,15 @@ public final class AVFoundation {
         ensureAvailable();
         if (H_CM_AUDIO_FORMAT_DESC_GET_ASBD == null || AV_MEDIA_TYPE_AUDIO == null)
             throw new IllegalStateException("AVFoundation audio handles unavailable");
+        MemorySegment pool = CoreFoundation.autoreleasePoolPush();
+        try {
+            return getAudioInfoInPool(path);
+        } finally {
+            CoreFoundation.autoreleasePoolPop(pool);
+        }
+    }
+
+    private static AudioInfo getAudioInfoInPool(String path) {
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment cfPath = CoreFoundation.cfStringCreate(temp, path);
             if (MemorySegment.NULL.equals(cfPath))
@@ -689,6 +729,16 @@ public final class AVFoundation {
     public static DecodedImage<PixelFormat> extractFrame(Arena arena, String path,
                                                                   long timeMillis, int maxEdge) {
         ensureAvailable();
+        MemorySegment pool = CoreFoundation.autoreleasePoolPush();
+        try {
+            return extractFrameInPool(arena, path, timeMillis, maxEdge);
+        } finally {
+            CoreFoundation.autoreleasePoolPop(pool);
+        }
+    }
+
+    private static DecodedImage<PixelFormat> extractFrameInPool(Arena arena, String path,
+                                                                long timeMillis, int maxEdge) {
         try (Arena temp = Arena.ofConfined()) {
             // 1. Create CFString from path
             MemorySegment cfPath = CoreFoundation.cfStringCreate(temp, path);
@@ -791,7 +841,7 @@ public final class AVFoundation {
             } finally {
                 // 11. cgImage is a CF object returned by "copy" -- we own it
                 cfRelease(cgImage);
-                // url, asset, generator are autoreleased ObjC objects
+                // url, asset, generator are autoreleased; the caller's pool frees them
                 cfRelease(cfPath);
             }
         } catch (IllegalStateException | DecodeException e) {
@@ -1047,6 +1097,39 @@ public final class AVFoundation {
         return ((q % 4) + 4) % 4;
     }
 
+    /**
+     * A track's display orientation as the two steps {@link FrameStream}
+     * applies to each decoded frame: an optional horizontal mirror, then
+     * {@code quarterTurns} 90&deg; clockwise turns.
+     */
+    record DisplayOrientation(int quarterTurns, boolean mirrored) {
+        boolean swapsDimensions() {
+            return (quarterTurns & 1) == 1;
+        }
+
+        boolean isIdentity() {
+            return quarterTurns == 0 && !mirrored;
+        }
+    }
+
+    /**
+     * Classifies the linear part {@code (a, b, c, d)} of an
+     * {@code AVAssetTrack}'s {@code preferredTransform}. {@code (a, b)} alone
+     * cannot tell a rotation from a reflection: a horizontal mirror
+     * {@code (-1, 0, 0, 1)} and a 180&deg; turn {@code (-1, 0, 0, -1)} share
+     * their first row. The determinant {@code ad - bc} does: negative means
+     * the transform mirrors.
+     *
+     * <p>A mirrored transform is a horizontal flip followed by a rotation;
+     * undoing the flip on the first row gives that rotation's
+     * {@code (a, b)}.</p>
+     */
+    static DisplayOrientation displayOrientation(double a, double b, double c, double d) {
+        boolean mirrored = a * d - b * c < 0;
+        int turns = mirrored ? rotationQuarterTurns(-a, -b) : rotationQuarterTurns(a, b);
+        return new DisplayOrientation(turns, mirrored);
+    }
+
     // -- Streaming video frame reader ----------------------------------------
 
     /**
@@ -1092,6 +1175,7 @@ public final class AVFoundation {
         private int rawWidth;       // decoded pixel width  (before rotation)
         private int rawHeight;      // decoded pixel height (before rotation)
         private int rotationTurns;  // container display rotation, 90 CW quarter-turns
+        private boolean mirrored;   // container display transform mirrors (applied before the turns)
         private int[] rotSrc;       // reused source scratch for the rotation copy
         private int[] rotDst;       // reused destination scratch for the rotation copy
         private long durationMicros = -1;
@@ -1149,9 +1233,13 @@ public final class AVFoundation {
                 MemorySegment xform = (MemorySegment) MSG_SEND_RET_CGAFFINETRANSFORM.invokeExact(
                         (SegmentAllocator) arena, track,
                         CoreFoundation.selRegisterName(arena, "preferredTransform"));
-                rotationTurns = rotationQuarterTurns(
-                        xform.get(ValueLayout.JAVA_DOUBLE, 0),   // a
-                        xform.get(ValueLayout.JAVA_DOUBLE, 8));  // b
+                DisplayOrientation orientation = displayOrientation(
+                        xform.get(ValueLayout.JAVA_DOUBLE, 0),    // a
+                        xform.get(ValueLayout.JAVA_DOUBLE, 8),    // b
+                        xform.get(ValueLayout.JAVA_DOUBLE, 16),   // c
+                        xform.get(ValueLayout.JAVA_DOUBLE, 24));  // d
+                rotationTurns = orientation.quarterTurns();
+                mirrored = orientation.mirrored();
 
                 MemorySegment errPtr = arena.allocate(ValueLayout.ADDRESS);
                 errPtr.set(ValueLayout.ADDRESS, 0, MemorySegment.NULL);
@@ -1338,7 +1426,7 @@ public final class AVFoundation {
                 int srcH = (int) cvPixelBufferGetHeight(imageBuffer);
                 MemorySegment base = cvPixelBufferGetBaseAddress(imageBuffer)
                         .reinterpret(srcStride * srcH);
-                if (rotationTurns != 0) {
+                if (rotationTurns != 0 || mirrored) {
                     rotateCopy(base, srcStride, srcH);
                     return;
                 }
@@ -1368,6 +1456,19 @@ public final class AVFoundation {
             int srcInts = strideInts * srcH;
             if (rotSrc == null || rotSrc.length < srcInts) rotSrc = new int[srcInts];
             MemorySegment.copy(base, ValueLayout.JAVA_INT, 0, rotSrc, 0, srcInts);
+            if (mirrored) {
+                // Horizontal flip of the visible pixels of each row, in place.
+                int rows = Math.min(rawHeight, srcH);
+                for (int y = 0; y < rows; y++) {
+                    int lo = y * strideInts;
+                    int hi = lo + rawWidth - 1;
+                    while (lo < hi) {
+                        int t = rotSrc[lo];
+                        rotSrc[lo++] = rotSrc[hi];
+                        rotSrc[hi--] = t;
+                    }
+                }
+            }
             int outInts = width * height;
             if (rotDst == null || rotDst.length < outInts) rotDst = new int[outInts];
             BgraRotation.rotate(rotSrc, strideInts, rawWidth, rawHeight, rotationTurns, rotDst);

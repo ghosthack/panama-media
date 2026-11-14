@@ -465,6 +465,7 @@ public final class WIC {
      */
     public static Dimensions getSize(MemorySegment imageData, long size) {
         ensureAvailable();
+        requireReadable(imageData, size);
 
         MemorySegment stream = MemorySegment.NULL;
         MemorySegment decoder = MemorySegment.NULL;
@@ -573,6 +574,7 @@ public final class WIC {
      */
     public static DecodedImage<PixelFormat> decode(Arena arena, MemorySegment imageData, long size) {
         ensureAvailable();
+        requireReadable(imageData, size);
         try (Arena temp = Arena.ofConfined()) {
             return decodeFromMemory(arena, temp, imageData, size);
         }
@@ -1649,9 +1651,17 @@ public final class WIC {
             }
 
             // Decode each frame
-            var frames = new java.util.ArrayList<GifFrame>(frameCount);
+            // Each frame gets its own arena so its native buffer is freed as
+            // soon as it has been copied out, and the running pixel total
+            // bounds the whole animation, not just each frame.
+            var frames = new java.util.ArrayList<GifFrame>(Math.min(Math.max(frameCount, 0), 1024));
+            long pixelsSoFar = 0;
             for (int i = 0; i < frameCount; i++) {
-                frames.add(decodeGifFrame(temp, factory, decoder, i));
+                try (Arena frameArena = Arena.ofConfined()) {
+                    GifFrame f = decodeGifFrame(frameArena, factory, decoder, i, pixelsSoFar);
+                    pixelsSoFar += (long) f.width() * f.height();
+                    frames.add(f);
+                }
             }
 
             return new AnimatedGif(canvasWidth, canvasHeight, loopCount, frames);
@@ -1666,7 +1676,8 @@ public final class WIC {
      * Decodes a single GIF frame with format conversion and metadata.
      */
     private static GifFrame decodeGifFrame(Arena temp, MemorySegment factory,
-                                           MemorySegment decoder, int index) throws Throwable {
+                                           MemorySegment decoder, int index,
+                                           long pixelsSoFar) throws Throwable {
         MemorySegment frame = MemorySegment.NULL;
         MemorySegment converter = MemorySegment.NULL;
         try {
@@ -1717,8 +1728,12 @@ public final class WIC {
             int w = pW.get(JAVA_INT, 0);
             int h = pH.get(JAVA_INT, 0);
 
+            // Bounds w*h (so the int stride and size below cannot overflow)
+            // and the animation as a whole, before anything is allocated.
+            ImageDimensions.addAnimationFrame(pixelsSoFar, w, h);
+
             int stride = w * RGBA_BPP;
-            int size = stride * h;
+            int size = Math.toIntExact((long) stride * h);
             MemorySegment pixelBuf = temp.allocate(JAVA_BYTE, size);
             Ole32.check((int) Source_CopyPixels.invokeExact(
                     Ole32.vtable(converter, 7), converter,
@@ -1800,6 +1815,23 @@ public final class WIC {
     }
 
     // -- Error handling ------------------------------------------------------
+
+    /**
+     * Rejects a caller-supplied {@code (imageData, size)} pair the native side
+     * would read past or truncate: IWICStream takes the raw address and a
+     * 32-bit length, so nothing below this point can bounds-check it.
+     */
+    private static void requireReadable(MemorySegment imageData, long size) {
+        java.util.Objects.requireNonNull(imageData, "imageData");
+        if (!imageData.isNative())
+            throw new IllegalArgumentException("imageData must be a native (off-heap) segment");
+        if (size < 0 || size > imageData.byteSize())
+            throw new IndexOutOfBoundsException(
+                    "size " + size + " out of bounds for a segment of " + imageData.byteSize() + " bytes");
+        if (size > Integer.MAX_VALUE)
+            throw new IllegalArgumentException(
+                    "size " + size + " exceeds the 2 GiB limit of IWICStream::InitializeFromMemory");
+    }
 
     private static void ensureAvailable() {
         if (!AVAILABLE)

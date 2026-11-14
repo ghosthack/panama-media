@@ -15,7 +15,9 @@ import static java.lang.foreign.MemoryLayout.PathElement.groupElement;
  * plain C and identical), following {@link DxvaAv1}'s pattern: layouts built
  * with named elements, every field offset derived by the FFM layout engine,
  * and the static initializer asserting the exact MSVC {@code sizeof} values
- * (232 / 1000 / 12 / 1) as a transcription check.
+ * (232 / 1000 / 10 / 1) as a transcription check. {@code dxva.h} declares
+ * these structs under {@code #pragma pack(push, 1)}; the picture-parameter and
+ * matrix structs happen to be naturally aligned, but the slice entry is not.
  *
  * <p>Bitfield unions are exposed as their underlying scalar
  * ({@code wFormatAndSequenceInfoFlags}, {@code dwCodingParamToolFlags},
@@ -34,6 +36,9 @@ public final class DxvaHevc {
     private static final ValueLayout.OfByte U8 = ValueLayout.JAVA_BYTE;
     private static final ValueLayout.OfShort U16 = ValueLayout.JAVA_SHORT;
     private static final ValueLayout.OfInt U32 = ValueLayout.JAVA_INT;
+    /** Byte-aligned variants for the {@code pack(1)} slice entry. */
+    private static final ValueLayout.OfShort P_U16 = ValueLayout.JAVA_SHORT_UNALIGNED;
+    private static final ValueLayout.OfInt P_U32 = ValueLayout.JAVA_INT_UNALIGNED;
 
     // ── DXVA_PicEntry_HEVC (1 byte) ──────────────────────────────────────
 
@@ -58,25 +63,29 @@ public final class DxvaHevc {
         public static final byte UNUSED = (byte) 0xFF;
     }
 
-    // ── DXVA_Slice_HEVC_Short (12 bytes) ─────────────────────────────────
+    // ── DXVA_Slice_HEVC_Short (10 bytes, pack(1)) ────────────────────────
 
     /**
      * {@code DXVA_Slice_HEVC_Short}: one slice's byte span within the
      * bitstream buffer (start code included), plus the chopping marker.
+     *
+     * <p>The struct is packed: 10 bytes with no tail padding, so entry
+     * {@code n} of a slice-control array starts at byte {@code 10 * n} and its
+     * fields are not 4-byte aligned. All access goes through unaligned
+     * layouts.</p>
      */
     public static final class SliceShort {
 
         private SliceShort() {}
 
         public static final GroupLayout LAYOUT = MemoryLayout.structLayout(
-                U32.withName("BSNALunitDataLocation"),
-                U32.withName("SliceBytesInBuffer"),
-                U16.withName("wBadSliceChopping"),
-                MemoryLayout.paddingLayout(2)
+                P_U32.withName("BSNALunitDataLocation"),
+                P_U32.withName("SliceBytesInBuffer"),
+                P_U16.withName("wBadSliceChopping")
         ).withName("DXVA_Slice_HEVC_Short");
 
         static {
-            checkSize(LAYOUT, 12);
+            checkSize(LAYOUT, 10);
         }
 
         static final long DATA_LOCATION = LAYOUT.byteOffset(groupElement("BSNALunitDataLocation"));
@@ -93,14 +102,14 @@ public final class DxvaHevc {
         }
 
         public static void fill(MemorySegment s, int dataLocation, int bytesInBuffer) {
-            s.set(U32, DATA_LOCATION, dataLocation);
-            s.set(U32, BYTES_IN_BUFFER, bytesInBuffer);
-            s.set(U16, BAD_CHOPPING, (short) 0);
+            s.set(P_U32, DATA_LOCATION, dataLocation);
+            s.set(P_U32, BYTES_IN_BUFFER, bytesInBuffer);
+            s.set(P_U16, BAD_CHOPPING, (short) 0);
         }
 
         /** Extends {@code SliceBytesInBuffer} (the last slice absorbs the 128-byte padding). */
         public static void addBytesInBuffer(MemorySegment s, int extra) {
-            s.set(U32, BYTES_IN_BUFFER, s.get(U32, BYTES_IN_BUFFER) + extra);
+            s.set(P_U32, BYTES_IN_BUFFER, s.get(P_U32, BYTES_IN_BUFFER) + extra);
         }
     }
 

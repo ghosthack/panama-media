@@ -15,7 +15,11 @@ import io.github.ghosthack.panama.media.core.Platform;
  * </ul>
  *
  * <p>The context is confined to the creating thread from construction to
- * {@link #close}, which must run on that thread too.</p>
+ * {@link #close}, which must run on that thread too. This is enforced: a
+ * {@link GL} call or {@code close()} from any other thread throws
+ * {@link WrongThreadException} and leaves the context intact, and a
+ * {@code GL} call after {@code close()} throws
+ * {@link IllegalStateException}.</p>
  */
 public sealed interface GLContext extends AutoCloseable
         permits CGLContext, WGLContext, EGLContext {

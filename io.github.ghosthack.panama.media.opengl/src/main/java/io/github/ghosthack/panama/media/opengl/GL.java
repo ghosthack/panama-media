@@ -75,6 +75,11 @@ public final class GL {
 
     private static final Linker LINKER = Linker.nativeLinker();
 
+    /** The thread the context was current on when this table was resolved. */
+    private final Thread owner = Thread.currentThread();
+    /** Set by the owning context's {@code close()}; no call is valid afterwards. */
+    private boolean closed;
+
     /** Out-parameter scratch (ints, a float[9] matrix): one context thread only. */
     private final MemorySegment scratch = Arena.ofAuto().allocate(64, 8);
 
@@ -657,11 +662,33 @@ public final class GL {
                 && deleteFramebuffers != null;
     }
 
-    private static MethodHandle need(MethodHandle handle, String name) {
+    /**
+     * Guards every entry point. A GL call on another thread, or after the
+     * context is gone, runs with no (or someone else's) current context:
+     * a silent no-op at best and a native crash at worst.
+     */
+    private MethodHandle need(MethodHandle handle, String name) {
+        requireOwner(owner, name);
+        if (closed) {
+            throw new IllegalStateException(name + ": the OpenGL context is closed");
+        }
         if (handle == null) {
             throw new UnsupportedOperationException(name + " is not exported by this OpenGL context");
         }
         return handle;
+    }
+
+    /** Marks the table dead; called by the owning context's {@code close()}. */
+    void invalidate() {
+        closed = true;
+    }
+
+    static void requireOwner(Thread owner, String what) {
+        Thread current = Thread.currentThread();
+        if (current != owner) {
+            throw new WrongThreadException(what + ": the OpenGL context is confined to "
+                    + owner.getName() + ", called from " + current.getName());
+        }
     }
 
     private static RuntimeException rethrow(Throwable t) {
