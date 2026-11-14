@@ -10,7 +10,12 @@ package io.github.ghosthack.panama.media.core;
 public enum PixelFormat implements BasePixelFormat {
     /** 8-bit RGBA (4 bytes per pixel, red first). */
     RGBA,
-    /** 8-bit BGRA (4 bytes per pixel, blue first). Native format on macOS and Windows. */
+    /**
+     * 8-bit BGRA (4 bytes per pixel, blue first). Native format on macOS and
+     * Windows. Says nothing about alpha: the WIC and ImageIO still-image
+     * decoders return premultiplied alpha under this label, and video frames
+     * are opaque. Each producer documents which.
+     */
     BGRA,
     /** 8-bit RGB (3 bytes per pixel, no alpha). */
     RGB,

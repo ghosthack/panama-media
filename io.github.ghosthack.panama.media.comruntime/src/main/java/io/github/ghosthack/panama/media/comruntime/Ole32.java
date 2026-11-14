@@ -125,8 +125,9 @@ public final class Ole32 {
     // ── Availability ───────────────────────────────────────────────────
 
     /**
-     * Returns {@code true} if ole32.dll was loaded successfully and
-     * all downcall handles are available (i.e. running on Windows).
+     * Returns {@code true} when running on Windows, where ole32.dll and the
+     * downcall handles are bound during class initialisation. Off Windows the
+     * other methods of this class must not be called.
      */
     public static boolean isAvailable() {
         return IS_WINDOWS;
@@ -144,7 +145,7 @@ public final class Ole32 {
      *
      * @param hr  HRESULT value
      * @param msg descriptive message for the exception
-     * @throws IllegalArgumentException if {@code hr < 0}
+     * @throws DecodeException if {@code hr < 0}
      */
     public static void check(int hr, String msg) {
         if (failed(hr))

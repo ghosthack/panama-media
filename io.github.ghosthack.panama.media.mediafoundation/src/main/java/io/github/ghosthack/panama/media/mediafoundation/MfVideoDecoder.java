@@ -907,6 +907,7 @@ public final class MfVideoDecoder implements AutoCloseable {
 
                 int hr = (int) MediaFoundation.IMFTransform_ProcessOutput.invokeExact(
                         Ole32.vtable(decoder, 25), decoder, 0, 1, outputBuf, pdwStatus);
+                MediaFoundation.releaseOutputEvents(outputBuf);
 
                 if (hr == MediaFoundation.MF_E_TRANSFORM_TYPE_NOT_SET
                         || hr == MediaFoundation.MF_E_TRANSFORM_STREAM_CHANGE) {
@@ -968,6 +969,7 @@ public final class MfVideoDecoder implements AutoCloseable {
 
                 int hr = (int) MediaFoundation.IMFTransform_ProcessOutput.invokeExact(
                         Ole32.vtable(decoder, 25), decoder, 0, 1, outputBuf, pdwStatus);
+                MediaFoundation.releaseOutputEvents(outputBuf);
                 if (hr == MediaFoundation.MF_E_TRANSFORM_TYPE_NOT_SET
                         || hr == MediaFoundation.MF_E_TRANSFORM_STREAM_CHANGE) {
                     Ole32.release(callerSample);
@@ -1180,14 +1182,23 @@ public final class MfVideoDecoder implements AutoCloseable {
         int hr = (int) MediaFoundation.H_MF_CREATE_SAMPLE.invokeExact(pp);
         Ole32.check(hr, "MFCreateSample");
         MemorySegment sample = pp.get(ValueLayout.ADDRESS, 0);
-        hr = (int) MediaFoundation.H_MF_CREATE_MEMORY_BUFFER.invokeExact(bufSz, pp2);
-        Ole32.check(hr, "MFCreateMemoryBuffer");
-        MemorySegment memBuf = pp2.get(ValueLayout.ADDRESS, 0);
-        hr = (int) MediaFoundation.IMFSample_AddBuffer.invokeExact(
-                Ole32.vtable(sample, 42), sample, memBuf);
-        Ole32.check(hr, "IMFSample::AddBuffer");
-        Ole32.release(memBuf);
-        return sample;
+        boolean handedOff = false;
+        try {
+            hr = (int) MediaFoundation.H_MF_CREATE_MEMORY_BUFFER.invokeExact(bufSz, pp2);
+            Ole32.check(hr, "MFCreateMemoryBuffer");
+            MemorySegment memBuf = pp2.get(ValueLayout.ADDRESS, 0);
+            try {
+                hr = (int) MediaFoundation.IMFSample_AddBuffer.invokeExact(
+                        Ole32.vtable(sample, 42), sample, memBuf);
+                Ole32.check(hr, "IMFSample::AddBuffer");
+            } finally {
+                Ole32.release(memBuf);
+            }
+            handedOff = true;
+            return sample;
+        } finally {
+            if (!handedOff) Ole32.release(sample);
+        }
     }
 
     /** Signals end-of-stream so buffered frames become receivable via {@link #nextFrame()}. */

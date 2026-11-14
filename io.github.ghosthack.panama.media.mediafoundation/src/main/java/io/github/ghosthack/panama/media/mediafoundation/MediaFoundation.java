@@ -807,7 +807,11 @@ public final class MediaFoundation {
 
     private static void checkMediaFoundationStartup(StringBuilder sb) {
         try (Arena temp = Arena.ofConfined()) {
-            Ole32.coInitializeEx();
+            // CoInitializeEx fails with RPC_E_CHANGED_MODE on a thread that is
+            // already in a single-threaded apartment. COM still works there,
+            // but that failed call must not be balanced: an extra
+            // CoUninitialize would drop the caller's own apartment reference.
+            boolean comInitialized = !failed(Ole32.coInitializeEx());
             try {
                 int hr = (int) H_MF_STARTUP.invokeExact(MF_VERSION, 0);
                 if (failed(hr)) {
@@ -822,7 +826,7 @@ public final class MediaFoundation {
                     try { int ignored = (int) H_MF_SHUTDOWN.invokeExact(); } catch (Throwable ignored) {}
                 }
             } finally {
-                Ole32.coUninitialize();
+                if (comInitialized) Ole32.coUninitialize();
             }
         } catch (Throwable t) {
             sb.append("MFSTARTUP_ERROR: ").append(t.getMessage()).append("\n");
@@ -831,7 +835,8 @@ public final class MediaFoundation {
 
     private static void checkH264DecoderMFT(StringBuilder sb) {
         try (Arena temp = Arena.ofConfined()) {
-            Ole32.coInitializeEx();
+            // Balanced only if it succeeded (see checkMediaFoundationStartup).
+            boolean comInitialized = !failed(Ole32.coInitializeEx());
             try {
                 int hr = (int) H_MF_STARTUP.invokeExact(MF_VERSION, 0);
                 if (failed(hr)) {
@@ -857,7 +862,7 @@ public final class MediaFoundation {
                     try { int ignored = (int) H_MF_SHUTDOWN.invokeExact(); } catch (Throwable ignored) {}
                 }
             } finally {
-                Ole32.coUninitialize();
+                if (comInitialized) Ole32.coUninitialize();
             }
         } catch (Throwable t) {
             sb.append("H264_DECODER_CHECK_ERROR: ").append(t.getMessage()).append("\n");
@@ -872,7 +877,7 @@ public final class MediaFoundation {
      * @param path  file system path to the video file
      * @return video information
      * @throws IllegalStateException    if Media Foundation is not available
-     * @throws IllegalArgumentException if the file cannot be opened or parsed
+     * @throws DecodeException          if the file cannot be opened or parsed
      */
     public static VideoInfo getVideoInfo(Arena arena, String path) {
         ensureAvailable();
@@ -959,7 +964,8 @@ public final class MediaFoundation {
      * @param timeMillis seek position in milliseconds
      * @return decoded frame as BGRA pixels
      * @throws IllegalStateException    if Media Foundation is not available
-     * @throws IllegalArgumentException if decoding fails
+     * @throws DecodeException          if decoding fails on both the Source
+     *                                  Reader and the manual decoder pipeline
      */
     public static DecodedImage<PixelFormat> extractFrame(Arena arena, String path,
                                                                    long timeMillis) {
@@ -987,7 +993,8 @@ public final class MediaFoundation {
      *                   for a full-size decode (no downscale hint)
      * @return decoded frame as BGRA pixels
      * @throws IllegalStateException    if Media Foundation is not available
-     * @throws IllegalArgumentException if decoding fails
+     * @throws DecodeException          if decoding fails on both the Source
+     *                                  Reader and the manual decoder pipeline
      */
     public static DecodedImage<PixelFormat> extractFrame(Arena arena, String path,
                                                                    long timeMillis, int maxEdge) {
@@ -1049,7 +1056,7 @@ public final class MediaFoundation {
             } catch (Exception manualEx) {
                 reportFrameDecodeAttempt(observer, "Manual MFT pipeline", false,
                         manualStarted, failureSummary(manualEx));
-                RuntimeException ex = new RuntimeException(
+                DecodeException ex = new DecodeException(
                         "extractFrame failed (SourceReader + manual MFT): " + path, manualEx);
                 ex.addSuppressed(e);
                 throw ex;
@@ -1541,6 +1548,7 @@ public final class MediaFoundation {
 
                     int hr = (int) IMFTransform_ProcessOutput.invokeExact(
                             vtable(decoder, 25), decoder, 0, 1, outputBuf, pdwStatus);
+                    releaseOutputEvents(outputBuf);
 
                     if (hr == MF_E_TRANSFORM_TYPE_NOT_SET || hr == MF_E_TRANSFORM_STREAM_CHANGE) {
                         if (!MemorySegment.NULL.equals(callerSample)) release(callerSample);
@@ -1617,13 +1625,22 @@ public final class MediaFoundation {
             int hr = (int) H_MF_CREATE_SAMPLE.invokeExact(ppOutSample);
             check(hr, "MFCreateSample");
             MemorySegment sample = ppOutSample.get(ValueLayout.ADDRESS, 0);
-            hr = (int) H_MF_CREATE_MEMORY_BUFFER.invokeExact(bufSz, ppOutBuffer);
-            check(hr, "MFCreateMemoryBuffer");
-            MemorySegment memBuf = ppOutBuffer.get(ValueLayout.ADDRESS, 0);
-            hr = (int) IMFSample_AddBuffer.invokeExact(vtable(sample, 42), sample, memBuf);
-            check(hr, "IMFSample::AddBuffer");
-            release(memBuf);
-            return sample;
+            boolean handedOff = false;
+            try {
+                hr = (int) H_MF_CREATE_MEMORY_BUFFER.invokeExact(bufSz, ppOutBuffer);
+                check(hr, "MFCreateMemoryBuffer");
+                MemorySegment memBuf = ppOutBuffer.get(ValueLayout.ADDRESS, 0);
+                try {
+                    hr = (int) IMFSample_AddBuffer.invokeExact(vtable(sample, 42), sample, memBuf);
+                    check(hr, "IMFSample::AddBuffer");
+                } finally {
+                    release(memBuf);
+                }
+                handedOff = true;
+                return sample;
+            } finally {
+                if (!handedOff) release(sample);
+            }
         }
 
         /** Re-reads the decoder output type after a stream/format change. */
@@ -2093,6 +2110,19 @@ public final class MediaFoundation {
         MemorySegment out = arena.allocate((long) ow * oh * RGBA_BPP);
         MemorySegment.copy(dst, 0, out, ValueLayout.JAVA_INT, 0, dst.length);
         return new DecodedImage<>(out, ow, oh, ow * RGBA_BPP, PixelFormat.BGRA);
+    }
+
+    /**
+     * Releases the {@code pEvents} collection a decoder may attach to an
+     * {@code MFT_OUTPUT_DATA_BUFFER} during {@code ProcessOutput} (offset 24),
+     * and clears the field. The caller owns it whatever the HRESULT.
+     */
+    static void releaseOutputEvents(MemorySegment outputDataBuffer) {
+        MemorySegment events = outputDataBuffer.get(ValueLayout.ADDRESS, 24);
+        if (!MemorySegment.NULL.equals(events)) {
+            release(events);
+            outputDataBuffer.set(ValueLayout.ADDRESS, 24, MemorySegment.NULL);
+        }
     }
 
     /** Sets the alpha byte of every pixel of a tightly packed BGRA image to 255, in place. */
@@ -2684,7 +2714,10 @@ public final class MediaFoundation {
 
                 int count = pCount.get(ValueLayout.JAVA_INT, 0);
                 if (DEBUG) System.out.println("[MF] MFTEnumEx found " + count + " video decoder(s)");
-                if (count == 0) return;
+                if (count == 0) {
+                    Ole32.coTaskMemFree(ppActivate.get(ValueLayout.ADDRESS, 0));
+                    return;
+                }
 
                 MemorySegment array = ppActivate.get(ValueLayout.ADDRESS, 0)
                         .reinterpret((long) count * ValueLayout.ADDRESS.byteSize());
@@ -2721,9 +2754,9 @@ public final class MediaFoundation {
                     }
                 }
 
-                // Free the array allocated by MFTEnumEx (CoTaskMemFree)
-                // We've already released each IMFActivate above; the array
-                // itself was allocated by COM and will be reclaimed at process exit.
+                // Each IMFActivate was released above; the array itself is
+                // CoTaskMemAlloc'ed by MFTEnumEx and is ours to free.
+                Ole32.coTaskMemFree(ppActivate.get(ValueLayout.ADDRESS, 0));
 
                 if (DEBUG && registered > 0) {
                     System.out.println("[MF] Registered " + registered
@@ -3089,7 +3122,8 @@ public final class MediaFoundation {
             int maxEdge,
             FrameDecodeObserver observer) {
         try (Arena temp = Arena.ofConfined()) {
-            Ole32.coInitializeEx();
+            // Balanced only if it succeeded (see checkMediaFoundationStartup).
+            boolean comInitialized = !failed(Ole32.coInitializeEx());
             try {
                 int hr = (int) H_MF_STARTUP.invokeExact(MF_VERSION, 0);
                 check(hr, "MFStartup");
@@ -3099,11 +3133,17 @@ public final class MediaFoundation {
                     check(hr, "MFCreateAttributes");
                     MemorySegment attrs = ppAttrs.get(ValueLayout.ADDRESS, 0);
 
-                    MemorySegment wpath = wstr(temp, path);
-                    MemorySegment ppReader = temp.allocate(ValueLayout.ADDRESS);
-                    hr = (int) H_MF_CREATE_SOURCE_READER_FROM_URL.invokeExact(wpath, attrs, ppReader);
-                    check(hr, "MFCreateSourceReaderFromURL");
-                    MemorySegment reader = ppReader.get(ValueLayout.ADDRESS, 0);
+                    MemorySegment reader;
+                    try {
+                        MemorySegment wpath = wstr(temp, path);
+                        MemorySegment ppReader = temp.allocate(ValueLayout.ADDRESS);
+                        hr = (int) H_MF_CREATE_SOURCE_READER_FROM_URL.invokeExact(wpath, attrs, ppReader);
+                        check(hr, "MFCreateSourceReaderFromURL");
+                        reader = ppReader.get(ValueLayout.ADDRESS, 0);
+                    } finally {
+                        // The reader keeps what it needs; our reference is done.
+                        release(attrs);
+                    }
                     // Container display rotation baked into the poster (best-effort).
                     int qcw = readRotationCw(temp, reader);
 
@@ -3291,25 +3331,29 @@ public final class MediaFoundation {
                                                 ? reducedDisplay.width() + "×" + reducedDisplay.height()
                                                 : "Rejected; decoding full size");
                             }
-                            check(hr, "Decoder SetOutputType");
-
-                            FrameDimensions surface =
-                                    frameDimensions(
-                                            temp, decoderOutputType);
                             FrameDimensions expectedDisplay =
                                     reductionAccepted
                                             ? reducedDisplay
                                             : sourceDisplay;
-                            VisibleArea visible =
-                                    visibleArea(
-                                            temp,
-                                            decoderOutputType,
-                                            surface,
-                                            expectedDisplay);
+                            FrameDimensions surface;
+                            VisibleArea visible;
+                            try {
+                                check(hr, "Decoder SetOutputType");
+                                surface =
+                                        frameDimensions(
+                                                temp, decoderOutputType);
+                                visible =
+                                        visibleArea(
+                                                temp,
+                                                decoderOutputType,
+                                                surface,
+                                                expectedDisplay);
+                            } finally {
+                                release(decoderOutputType);
+                            }
                             int width = surface.width();
                             int height = surface.height();
 
-                            release(decoderOutputType);
                             release(nativeType);
                             nativeType = MemorySegment.NULL;
 
@@ -3406,6 +3450,7 @@ public final class MediaFoundation {
                                 hr = (int) IMFTransform_ProcessOutput.invokeExact(
                                         vtable(decoder, 25), decoder,
                                         0, 1, outputBuf, pdwStatus);
+                                releaseOutputEvents(outputBuf);
 
                                 if (hr == MF_E_TRANSFORM_TYPE_NOT_SET || hr == MF_E_TRANSFORM_STREAM_CHANGE) {
                                     if (!MemorySegment.NULL.equals(callerSample))
@@ -3415,29 +3460,33 @@ public final class MediaFoundation {
                                             vtable(decoder, 14), decoder, 0, 0, ppNewOut);
                                     check(hrNew, "GetOutputAvailableType after stream change");
                                     MemorySegment newOutType = ppNewOut.get(ValueLayout.ADDRESS, 0);
-                                    hrNew = (int) IMFTransform_SetOutputType.invokeExact(
-                                            vtable(decoder, 16), decoder, 0, newOutType, 0);
-                                    check(hrNew, "Re-SetOutputType");
-                                    surface =
-                                            frameDimensions(
-                                                    temp, newOutType);
-                                    // A decoder can accept the downscale hint
-                                    // and then announce, through this stream
-                                    // change, that it is emitting the full
-                                    // picture after all. Cropping that to the
-                                    // reduced size would return its top-left
-                                    // corner, so go by the new surface.
-                                    boolean surfaceReduced =
-                                            surface.width() < sourceDisplay.width()
-                                                    || surface.height() < sourceDisplay.height();
-                                    visible =
-                                            visibleArea(
-                                                    temp,
-                                                    newOutType,
-                                                    surface,
-                                                    surfaceReduced
-                                                            ? expectedDisplay
-                                                            : sourceDisplay);
+                                    try {
+                                        hrNew = (int) IMFTransform_SetOutputType.invokeExact(
+                                                vtable(decoder, 16), decoder, 0, newOutType, 0);
+                                        check(hrNew, "Re-SetOutputType");
+                                        surface =
+                                                frameDimensions(
+                                                        temp, newOutType);
+                                        // A decoder can accept the downscale hint
+                                        // and then announce, through this stream
+                                        // change, that it is emitting the full
+                                        // picture after all. Cropping that to the
+                                        // reduced size would return its top-left
+                                        // corner, so go by the new surface.
+                                        boolean surfaceReduced =
+                                                surface.width() < sourceDisplay.width()
+                                                        || surface.height() < sourceDisplay.height();
+                                        visible =
+                                                visibleArea(
+                                                        temp,
+                                                        newOutType,
+                                                        surface,
+                                                        surfaceReduced
+                                                                ? expectedDisplay
+                                                                : sourceDisplay);
+                                    } finally {
+                                        release(newOutType);
+                                    }
                                     width = surface.width();
                                     height = surface.height();
                                     MemorySegment pNewSI = temp.allocate(12);
@@ -3448,7 +3497,6 @@ public final class MediaFoundation {
                                                 & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES) != 0;
                                         outputBufSize = pNewSI.get(ValueLayout.JAVA_INT, 4);
                                     }
-                                    release(newOutType);
                                     continue;
                                 }
 
@@ -3542,7 +3590,7 @@ public final class MediaFoundation {
                     mfShutdown();
                 }
             } finally {
-                Ole32.coUninitialize();
+                if (comInitialized) Ole32.coUninitialize();
             }
         } catch (IllegalStateException | DecodeException e) {
             throw e;

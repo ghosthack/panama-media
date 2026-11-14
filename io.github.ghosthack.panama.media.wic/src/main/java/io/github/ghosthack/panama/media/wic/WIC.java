@@ -29,7 +29,14 @@ import static java.lang.foreign.ValueLayout.JAVA_INT;
  * This class provides low-level decode operations that return raw pixel data
  * in Arena-managed memory.
  * <p>
- * Decoded images are always in BGRA format with 4 bytes per pixel.
+ * Decoded images are always 32-bit BGRA with <b>premultiplied</b> alpha
+ * ({@code GUID_WICPixelFormat32bppPBGRA}), labelled {@link PixelFormat#BGRA}:
+ * colour channels are already multiplied by alpha, so un-premultiply before
+ * handing the pixels to an API that expects straight alpha.
+ * <p>
+ * The source's EXIF orientation is applied to the pixels, and the returned
+ * {@link DecodedImage#orientation()} is always {@code 1}; the original tag is
+ * not reported.
  * <p>
  * Thread-safe when each thread uses its own {@link Arena}.
  */
@@ -409,7 +416,7 @@ public final class WIC {
      * @param imageData the raw image file bytes
      * @return dimensions as {@code [width, height]} with EXIF orientation applied
      * @throws IllegalStateException    if WIC is not available
-     * @throws IllegalArgumentException if the data cannot be decoded
+     * @throws DecodeException       if the data cannot be decoded
      */
     public static Dimensions getSize(byte[] imageData) {
         ensureAvailable();
@@ -461,7 +468,7 @@ public final class WIC {
      * @param size      number of bytes to read from {@code imageData}
      * @return image dimensions
      * @throws IllegalStateException    if WIC is not available
-     * @throws IllegalArgumentException if the data cannot be decoded
+     * @throws DecodeException       if the data cannot be decoded
      */
     public static Dimensions getSize(MemorySegment imageData, long size) {
         ensureAvailable();
@@ -512,7 +519,7 @@ public final class WIC {
      * @param path absolute file path
      * @return image dimensions with EXIF orientation applied
      * @throws IllegalStateException    if WIC is not available
-     * @throws IllegalArgumentException if the file cannot be decoded
+     * @throws DecodeException       if the file cannot be decoded
      */
     public static Dimensions getSize(String path) {
         ensureAvailable();
@@ -552,7 +559,8 @@ public final class WIC {
      * @param imageData raw image file bytes
     * @return decoded image with BGRA pixels
      * @throws IllegalStateException    if WIC is not available
-     * @throws IllegalArgumentException if decoding fails
+     * @throws DecodeException       if decoding fails, or the image exceeds
+     *                               {@link ImageDimensions#MAX_PIXELS}
      */
     public static DecodedImage<PixelFormat> decode(Arena arena, byte[] imageData) {
         ensureAvailable();
@@ -570,7 +578,8 @@ public final class WIC {
      * @param size      number of bytes to read from the segment
     * @return decoded image with BGRA pixels
      * @throws IllegalStateException    if WIC is not available
-     * @throws IllegalArgumentException if decoding fails
+     * @throws DecodeException       if decoding fails, or the image exceeds
+     *                               {@link ImageDimensions#MAX_PIXELS}
      */
     public static DecodedImage<PixelFormat> decode(Arena arena, MemorySegment imageData, long size) {
         ensureAvailable();
@@ -588,7 +597,8 @@ public final class WIC {
      * @param path  file system path to the image file
     * @return decoded image with BGRA pixels
      * @throws IllegalStateException    if WIC is not available
-     * @throws IllegalArgumentException if decoding fails
+     * @throws DecodeException       if decoding fails, or the image exceeds
+     *                               {@link ImageDimensions#MAX_PIXELS}
      */
     public static DecodedImage<PixelFormat> decodeFromPath(Arena arena, String path) {
         ensureAvailable();
@@ -822,7 +832,7 @@ public final class WIC {
      * {@code GUID_WICPixelFormat*} GUIDs are looked up in a curated map; an
      * unrecognised GUID falls back to {@code IWICPixelFormatInfo} for a generic
      * bits-per-pixel / channel-count description (e.g. {@code "32-bit, 4 channels"}).
-     * Returns {@code null} when WIC is unavailable or the format is unknown and
+     * Returns {@code null} when the format is unknown and
      * its component info cannot be queried — never throws for an unrecognised
      * format (only for a genuinely undecodable file).
      *
@@ -1306,12 +1316,19 @@ public final class WIC {
                         Ole32.vtable(reader, 5), reader, wsPath, propvariant);
                 if (Ole32.failed(hr)) continue;
 
-                short vt = propvariant.get(ValueLayout.JAVA_SHORT, 0);
-                if (vt == VT_UI2) {
-                    int orientation = Short.toUnsignedInt(propvariant.get(ValueLayout.JAVA_SHORT, 8));
-                    if (orientation >= 1 && orientation <= 8) {
-                        return orientation;
+                // A malformed file can carry any type under this tag (a
+                // string, a blob, a nested reader); whatever came back is
+                // owned by us and must be cleared.
+                try {
+                    short vt = propvariant.get(ValueLayout.JAVA_SHORT, 0);
+                    if (vt == VT_UI2) {
+                        int orientation = Short.toUnsignedInt(propvariant.get(ValueLayout.JAVA_SHORT, 8));
+                        if (orientation >= 1 && orientation <= 8) {
+                            return orientation;
+                        }
                     }
+                } finally {
+                    Ole32.propVariantClear(propvariant);
                 }
             }
             return 1;
@@ -1756,9 +1773,13 @@ public final class WIC {
             int hr = (int) MetadataReader_GetMetadataByName.invokeExact(
                     Ole32.vtable(reader, 5), reader, ws, pv);
             if (Ole32.failed(hr)) return 0;
-            short vt = pv.get(ValueLayout.JAVA_SHORT, 0);
-            if (vt == VT_UI2) return Short.toUnsignedInt(pv.get(ValueLayout.JAVA_SHORT, 8));
-            return 0;
+            try {
+                short vt = pv.get(ValueLayout.JAVA_SHORT, 0);
+                if (vt == VT_UI2) return Short.toUnsignedInt(pv.get(ValueLayout.JAVA_SHORT, 8));
+                return 0;
+            } finally {
+                Ole32.propVariantClear(pv);
+            }
         } catch (Throwable t) { return 0; }
     }
 
@@ -1770,9 +1791,13 @@ public final class WIC {
             int hr = (int) MetadataReader_GetMetadataByName.invokeExact(
                     Ole32.vtable(reader, 5), reader, ws, pv);
             if (Ole32.failed(hr)) return 0;
-            short vt = pv.get(ValueLayout.JAVA_SHORT, 0);
-            if (vt == VT_UI1) return Byte.toUnsignedInt(pv.get(JAVA_BYTE, 8));
-            return 0;
+            try {
+                short vt = pv.get(ValueLayout.JAVA_SHORT, 0);
+                if (vt == VT_UI1) return Byte.toUnsignedInt(pv.get(JAVA_BYTE, 8));
+                return 0;
+            } finally {
+                Ole32.propVariantClear(pv);
+            }
         } catch (Throwable t) { return 0; }
     }
 
@@ -1781,37 +1806,45 @@ public final class WIC {
      * Returns 0 for infinite loop.
      */
     private static int readGifLoopCount(Arena arena, MemorySegment reader) {
+        // Both values are byte vectors allocated by WIC with CoTaskMemAlloc;
+        // each PROPVARIANT that was filled is cleared before returning.
+        MemorySegment application = arena.allocate(PROPVARIANT_SIZE);
+        MemorySegment data = arena.allocate(PROPVARIANT_SIZE);
+        application.fill((byte) 0);
+        data.fill((byte) 0);
         try {
             // Check /appext/Application for NETSCAPE2.0 or ANIMEXTS1.0
-            MemorySegment pv = arena.allocate(PROPVARIANT_SIZE);
-            pv.fill((byte) 0);
             MemorySegment ws = Ole32.wstr(arena, "/appext/Application");
             int hr = (int) MetadataReader_GetMetadataByName.invokeExact(
-                    Ole32.vtable(reader, 5), reader, ws, pv);
+                    Ole32.vtable(reader, 5), reader, ws, application);
             if (Ole32.failed(hr)) return 0;
 
-            short vt = pv.get(ValueLayout.JAVA_SHORT, 0);
+            short vt = application.get(ValueLayout.JAVA_SHORT, 0);
             if (vt != VT_VECTOR_UI1) return 0;
 
             // Read /appext/Data for loop count
-            pv.fill((byte) 0);
             ws = Ole32.wstr(arena, "/appext/Data");
             hr = (int) MetadataReader_GetMetadataByName.invokeExact(
-                    Ole32.vtable(reader, 5), reader, ws, pv);
+                    Ole32.vtable(reader, 5), reader, ws, data);
             if (Ole32.failed(hr)) return 0;
 
-            vt = pv.get(ValueLayout.JAVA_SHORT, 0);
+            vt = data.get(ValueLayout.JAVA_SHORT, 0);
             if (vt != VT_VECTOR_UI1) return 0;
 
             // CAUB struct: count at offset 8, pointer at offset 16 (x64)
-            int count = pv.get(JAVA_INT, 8);
+            int count = data.get(JAVA_INT, 8);
             if (count < 4) return 0;
-            MemorySegment dataPtr = pv.get(ValueLayout.ADDRESS, 16)
+            MemorySegment dataPtr = data.get(ValueLayout.ADDRESS, 16)
                     .reinterpret(count);
             // byte 0: extsize, byte 1: loopType (1=animated), byte 2-3: loop count (LE)
             if (dataPtr.get(JAVA_BYTE, 1) != 1) return 0;
             return Short.toUnsignedInt(dataPtr.get(ValueLayout.JAVA_SHORT_UNALIGNED, 2));
-        } catch (Throwable t) { return 0; }
+        } catch (Throwable t) {
+            return 0;
+        } finally {
+            Ole32.propVariantClear(application);
+            Ole32.propVariantClear(data);
+        }
     }
 
     // -- Error handling ------------------------------------------------------

@@ -21,9 +21,12 @@ import java.lang.foreign.MemorySegment;
  * un-tagged inputs so consumers can branch on orientation uniformly without
  * a separate "is it set?" check.
  * <p>
- * Producers that already bake the transform into the returned pixels still
+ * A producer that bakes the transform into the returned pixels may still
  * report the source tag value, so downstream encoders can re-embed it or
- * consumers can record it as metadata without re-opening the source.
+ * consumers can record it as metadata without re-opening the source: the
+ * ImageIO (macOS) decoder does. Others report {@code 1} once the pixels are
+ * upright: the WIC (Windows) decoder and the video frame extractors do. Check
+ * the producer's documentation before rotating by this value.
  * <p>
  * {@link #ORIENTATION_UNSET} ({@code 0}) is reserved as a sentinel for
  * callers / APIs that need to disambiguate "tag truly absent" from "tag

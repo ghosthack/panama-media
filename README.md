@@ -26,8 +26,13 @@ The current public snapshot contains:
 The Windows family is designed for 64-bit Windows, the macOS family
 (`corefoundation`, `cgimage`, `avfoundation`, `accelerate`) for macOS, and
 `opengl` for macOS, Windows and Linux. Every module compiles on every
-operating system; platform-specific entry points report unavailable (or throw
-`UnsupportedOperationException`) elsewhere, and native smoke tests skip there.
+operating system. Elsewhere each binding's `isAvailable()` returns `false`,
+and calling it anyway throws: `IllegalStateException` from the image and video
+entry points (`WIC`, `MediaFoundation`, `ImageIO`, `AVFoundation`),
+`UnsupportedOperationException` from `Accelerate` and `GLContext.create()`.
+The low-level helpers (`Ole32`, `Advapi32`, `D3D11Video`, `CoreFoundation`)
+are only meant to be called where `isAvailable()` is `true`. Native smoke
+tests skip on the other platforms.
 CI verifies the reactor on Windows x64, Linux x64 and macOS arm64.
 
 ## Build
@@ -41,7 +46,7 @@ mvn install
 
 `verify` compiles and packages the complete public reactor. The project test
 suite is deliberately not included in this source snapshot. `install` makes
-the eleven `0.1.5` artifacts available to another local Maven project.
+the eleven `0.1.6` artifacts available to another local Maven project.
 
 ## Use
 
@@ -52,7 +57,7 @@ For WIC, declare the top-level artifact; Maven brings in `core` and
 <dependency>
   <groupId>io.github.ghosthack</groupId>
   <artifactId>panama-media-wic</artifactId>
-  <version>0.1.5</version>
+  <version>0.1.6</version>
 </dependency>
 ```
 
@@ -79,7 +84,7 @@ Media Foundation is analogous:
 <dependency>
   <groupId>io.github.ghosthack</groupId>
   <artifactId>panama-media-mediafoundation</artifactId>
-  <version>0.1.5</version>
+  <version>0.1.6</version>
 </dependency>
 ```
 
@@ -89,6 +94,9 @@ decoder surface alignment and padding. Callers that demux compressed video
 themselves can use `MfVideoDecoder` for the lower-level path; its `Frame`
 retains the native NV12/P010 row stride and UV-plane offset while reporting
 the visible dimensions.
+
+Still images from `WIC` and `ImageIO` are BGRA with premultiplied alpha, with
+the EXIF orientation already applied to the pixels; video frames are opaque.
 
 On macOS, `ImageIO` (`cgimage`) mirrors the WIC API — for example
 `ImageIO.decodeFromPath(arena, "photo.heic")` — and

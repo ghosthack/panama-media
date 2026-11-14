@@ -474,9 +474,12 @@ public final class AVFoundation {
      *
      * @param arena arena for temporary native allocations (must outlive this call)
      * @param path  absolute file system path to the video file
-     * @return video metadata including dimensions, duration, and frame rate
-     * @throws IllegalStateException    if AVFoundation is not available
-     * @throws IllegalArgumentException if the video file cannot be read or has no video track
+     * @return video metadata including display dimensions, duration, and frame
+     *         rate. A file that cannot be opened, or has no video track, is
+     *         not an error here: it yields zero width, height and frame rate
+     *         (and a zero duration when the file cannot be opened at all)
+     * @throws IllegalStateException if AVFoundation is not available
+     * @throws DecodeException       if a native call fails unexpectedly
      */
     public static VideoInfo getVideoInfo(Arena arena, String path) {
         ensureAvailable();
@@ -704,7 +707,7 @@ public final class AVFoundation {
      * @param timeMillis time position in milliseconds
     * @return decoded frame with BGRA pixels
      * @throws IllegalStateException    if AVFoundation is not available
-     * @throws IllegalArgumentException if frame extraction fails
+     * @throws DecodeException       if frame extraction fails
      */
     public static DecodedImage<PixelFormat> extractFrame(Arena arena, String path,
                                                                   long timeMillis) {
@@ -724,7 +727,7 @@ public final class AVFoundation {
      * @return decoded frame with BGRA pixels, no larger than {@code maxEdge} on
      *         its longest edge (AVFoundation never upscales)
      * @throws IllegalStateException    if AVFoundation is not available
-     * @throws IllegalArgumentException if frame extraction fails
+     * @throws DecodeException       if frame extraction fails
      */
     public static DecodedImage<PixelFormat> extractFrame(Arena arena, String path,
                                                                   long timeMillis, int maxEdge) {
